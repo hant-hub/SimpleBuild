@@ -31,7 +31,7 @@ typedef void exitproc(int);
 extern exitproc* exit_;
 
 
-char* sb_cmd_push_arg_sized(sb_cmd* c, char* str, uint32_t len);
+void sb_cmd_push_args(sb_cmd* c, uint32_t num, ...);
 void sb_cmd_clear_args(sb_cmd* c);
 void sb_cmd_free(sb_cmd* c);
 
@@ -40,10 +40,22 @@ pid_t sb_cmd_async(sb_cmd* c);
 
 int sb_cmd_fence(pid_t id);
 
+int sb_should_rebuild(const char* srcpath, const char* binpath);
+void sb_rebuild_self(int argc, char* argv[], const char* srcpath);
+
+
+#define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
+#define sb_cmd_push(c, ...) \
+    sb_cmd_push_args(c, \
+            ARRAY_SIZE(((const char*[]){ __VA_ARGS__ })), \
+            __VA_ARGS__ )
+#define AUTO_REBUILD(c, v) \
+    sb_rebuild_self(c, v, __FILE__)
+
 #ifdef SB_IMPL
 #include "sb.c"
 #endif
 
-#define sb_cmd_push_arg(c, x) sb_cmd_push_arg_sized(c, x, sizeof(x))
+
 
 #endif

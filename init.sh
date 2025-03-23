@@ -1,1 +1,1 @@
-cc src/test.c -o build/app
+cc test.c -o sb_build

@@ -1,1 +1,1 @@
-./build/app
+./sb_build

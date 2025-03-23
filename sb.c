@@ -1,3 +1,10 @@
+#include <stdarg.h>
+#include <string.h>
+#include <limits.h>
+#include <time.h>
+#include <stdio.h>
+#include "fcntl.h"
+#include "sys/stat.h"
 #ifndef SB_IMPL
 #include "sb.h"
 #endif
@@ -6,23 +13,32 @@ fproc *fork_ = fork;
 execproc* execvp_ = execvp;
 exitproc* exit_ = exit;
 
-char* sb_cmd_push_arg_sized(sb_cmd* c, char* str, uint32_t len) {
+void sb_cmd_push_args(sb_cmd* c, uint32_t num, ...) {
     //grow textbuffer
-    if (c->tsize + len > c->tcap) {
-        uint32_t newsize = c->tcap ? c->tcap : SB_MIN_TEXT_SIZE;
-        while (newsize < c->tsize + len) newsize *= 2;
+    printf("%d\n", num);
+    va_list args;
+    va_start(args, num);
 
-        c->textbuffer = (char*)realloc(c->textbuffer, newsize);
-        c->tcap = newsize;
+    for (int i = 0; i < num; i++) { 
+        const char* str = va_arg(args, const char*);
+        uint32_t len = strlen(str) + 1;
+        if (c->tsize + len > c->tcap) {
+            uint32_t newsize = c->tcap ? c->tcap : SB_MIN_TEXT_SIZE;
+            while (newsize < c->tsize + len) newsize *= 2;
+
+            c->textbuffer = (char*)realloc(c->textbuffer, newsize);
+            c->tcap = newsize;
+        }
+        //push string
+        char* handle = &c->textbuffer[c->tsize];
+        memcpy(handle, str, len);
+        c->tsize += len;
+        c->asize++;
     }
-    //push string
-    char* handle = &c->textbuffer[c->tsize];
-    memcpy(handle, str, len);
-    c->tsize += len;
-    c->asize++;
 
-    return handle;
+    va_end(args);
 }
+
 
 int sb_cmd_sync(sb_cmd* c) {
 
@@ -89,5 +105,38 @@ void sb_cmd_clear_args(sb_cmd* c) {
 void sb_cmd_free(sb_cmd* c) {
     free(c->textbuffer);
     c->textbuffer = 0;
+}
+
+
+int sb_should_rebuild(const char* srcpath, const char* binpath) {
+    struct stat srcstat;
+    struct stat binstat;
+
+    if (stat(srcpath, &srcstat)) {
+        printf("Can't Find Source\n");
+        exit(1);
+    }
+    if (stat(binpath, &binstat)) {
+        printf("No Preexisting Binary\n");
+        binstat.st_mtim.tv_sec = INT_MAX;
+    }
+
+    return srcstat.st_mtim.tv_sec > binstat.st_mtim.tv_sec;
+}
+
+
+void sb_rebuild_self(int argc, char* argv[], const char* srcpath) {
+    int should = sb_should_rebuild(srcpath, argv[0]);
+    if (!should) return; //run current script
+
+    sb_cmd* c = &(sb_cmd){0};
+    sb_cmd_push(c, "cc", srcpath, "-o", argv[0]);
+
+    if (sb_cmd_sync(c)) {
+        exit(1); //error out
+    }
+
+    sb_cmd_clear_args(c);
+    execvp_(argv[0], argv); //switch to new build
 }
 
