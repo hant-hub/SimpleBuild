@@ -38,10 +38,11 @@ void sb_cmd_free(sb_cmd* c);
 int sb_cmd_sync(sb_cmd* c);
 pid_t sb_cmd_async(sb_cmd* c);
 
-int sb_cmd_fence(pid_t id);
+int sb_cmd_fence(uint32_t);
 
 int sb_should_rebuild(const char* srcpath, const char* binpath);
 void sb_rebuild_self(int argc, char* argv[], const char* srcpath);
+
 
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
@@ -55,7 +56,6 @@ void sb_rebuild_self(int argc, char* argv[], const char* srcpath);
 #ifdef SB_IMPL
 #include "sb.c"
 #endif
-
 
 
 #endif

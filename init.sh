@@ -1,1 +1,1 @@
-cc test.c -o sb_build
+cc test.c -g -o sb_build

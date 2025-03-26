@@ -15,7 +15,7 @@ exitproc* exit_ = exit;
 
 void sb_cmd_push_args(sb_cmd* c, uint32_t num, ...) {
     //grow textbuffer
-    printf("%d\n", num);
+    //printf("%d\n", num);
     va_list args;
     va_start(args, num);
 
@@ -42,14 +42,21 @@ void sb_cmd_push_args(sb_cmd* c, uint32_t num, ...) {
 
 int sb_cmd_sync(sb_cmd* c) {
 
+    char* args[c->asize + 1]; 
+    memset(args, 0, sizeof(char*) * (c->asize + 1));
+
+    printf("%s", args[0]);
+    for (int i = 1; i < c->asize; i++) {
+        printf(" %s", args[i]);
+    }
+    printf("\n");
+
     //build args list
     pid_t cid = sb_cmd_async(c);    
 
     int status;
     waitpid(cid, &status, 0); //idk options should be fine for now
                               
-    char* args[c->asize + 1]; 
-    memset(args, 0, sizeof(char*) * (c->asize + 1));
 
     char* at = c->textbuffer;
     for (int i = 0; i < c->asize; i++) {
@@ -58,11 +65,6 @@ int sb_cmd_sync(sb_cmd* c) {
         at++;
     }
 
-    printf("%s", args[0]);
-    for (int i = 1; i < c->asize; i++) {
-     printf(" %s", args[i]);
-    }
-    printf("\n");
     
     return status;
 }
@@ -79,6 +81,11 @@ pid_t sb_cmd_async(sb_cmd* c) {
     }
 
     //output command
+    printf("%s", args[0]);
+    for (int i = 1; i < c->asize; i++) {
+        printf(" %s", args[i]);
+    }
+    printf("\n");
 
     pid_t cid = fork_();
     if (cid == 0) {
@@ -90,9 +97,12 @@ pid_t sb_cmd_async(sb_cmd* c) {
     return cid;
 }
 
-int sb_cmd_fence(pid_t id) {
+int sb_cmd_fence(uint32_t num) {
     int status;
-    waitpid(id, &status, WUNTRACED);
+    for (int i = 0; i < num; i++) {
+        waitpid(-1, &status, WUNTRACED);
+        if (status) return status;
+    }
 
     return status;
 }
@@ -137,6 +147,7 @@ void sb_rebuild_self(int argc, char* argv[], const char* srcpath) {
     }
 
     sb_cmd_clear_args(c);
+    sb_cmd_free(c);
     execvp_(argv[0], argv); //switch to new build
 }
 
