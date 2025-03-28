@@ -1,4 +1,5 @@
 #include <stdarg.h>
+#include <stdlib.h>
 #include <string.h>
 #include <limits.h>
 #include <time.h>
@@ -41,32 +42,13 @@ void sb_cmd_push_args(sb_cmd* c, uint32_t num, ...) {
 
 
 int sb_cmd_sync(sb_cmd* c) {
-
-    char* args[c->asize + 1]; 
-    memset(args, 0, sizeof(char*) * (c->asize + 1));
-
-    printf("%s", args[0]);
-    for (int i = 1; i < c->asize; i++) {
-        printf(" %s", args[i]);
-    }
-    printf("\n");
-
     //build args list
     pid_t cid = sb_cmd_async(c);    
 
     int status;
-    waitpid(cid, &status, 0); //idk options should be fine for now
-                              
-
-    char* at = c->textbuffer;
-    for (int i = 0; i < c->asize; i++) {
-        args[i] = at;
-        while (at[0] != 0) at++; 
-        at++;
-    }
-
+    pid_t out = waitpid(cid, &status, 0); //idk options should be fine for now
     
-    return status;
+    return out == -1;
 }
 
 pid_t sb_cmd_async(sb_cmd* c) {
@@ -101,7 +83,7 @@ int sb_cmd_fence(uint32_t num) {
     int status;
     for (int i = 0; i < num; i++) {
         waitpid(-1, &status, WUNTRACED);
-        if (status) return status;
+        if (WEXITSTATUS(status)) return status;
     }
 
     return status;
