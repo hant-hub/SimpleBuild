@@ -9,6 +9,7 @@
 int main(int argc, char* argv[]) {
     AUTO_REBUILD(argc, argv);
 
+
     sb_cmd* c = &(sb_cmd){0};
     sb_cmd_push(c, "echo", "test1");
     sb_cmd_async(c);
