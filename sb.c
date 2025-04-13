@@ -4,6 +4,7 @@
 #include <limits.h>
 #include <time.h>
 #include <stdio.h>
+#include <winerror.h>
 
 #ifndef SB_IMPL
 #include "sb.h"
@@ -11,10 +12,85 @@
 
 
 static uint32_t pendingCommands = 0; 
+static char* compiler = NULL; 
 
-#if defined(WIN32) || defined(__WIN32__)
+#if defined(WIN32) || defined(__WIN32__) || defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#define _WINUSER_
+#define _WINGDI_
+#define _IMM_
+#define _WINCON_
 #include <windows.h>
+#include <processthreadsapi.h>
+#include <minwinbase.h>
 
+
+SB_PHANDLE sb_cmd_async(sb_cmd* c) {
+    pendingCommands++;
+    char* args[256]; 
+    memset(args, 0, sizeof(char*) * (c->asize + 1));
+
+    char* at = c->textbuffer;
+    for (int i = 0; i < c->asize; i++) {
+        args[i] = at;
+        while (at[0] != 0) at++; 
+        at[0] = ' ';
+        at++;
+    }
+    at--;
+    at[0] = 0;
+
+    //output command
+    printf("%s", args[0]);
+    for (int i = 1; i < c->asize; i++) {
+        printf(" %s", args[i]);
+    }
+    printf("\n");
+    
+    STARTUPINFO startInfo;
+    ZeroMemory(&startInfo, sizeof(startInfo));
+    startInfo.cb = sizeof(STARTUPINFO);
+    startInfo.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+    startInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    startInfo.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+    startInfo.dwFlags |= STARTF_USESTDHANDLES;
+
+    PROCESS_INFORMATION pinfo;
+    ZeroMemory(&pinfo, sizeof(PROCESS_INFORMATION));
+
+    LPSTR s;
+
+    BOOL success = CreateProcessA(
+            NULL,
+            c->textbuffer,
+            NULL,
+            NULL,
+            TRUE,
+            0,
+            NULL,
+            NULL,
+            &startInfo,
+            &pinfo
+            );
+
+    if (!success) {
+        printf("failed\n");
+        return 0;
+    }
+    CloseHandle(pinfo.hThread);
+    return pinfo.hProcess;
+}
+
+int sb_cmd_fence(SB_PHANDLE h) {
+    if (!h) return 0;
+    DWORD result = WaitForSingleObject(h, INFINITE);
+    return result;
+}
+
+int sb_cmd_sync(sb_cmd* c) {
+    SB_PHANDLE h = sb_cmd_async(c);
+    return sb_cmd_fence(h);
+}
 
 #else
 #include <sys/types.h>
@@ -132,9 +208,10 @@ int sb_cmd_sync_and_reset(sb_cmd* c) {
     return status;
 }
 
-void sb_cmd_async_and_reset(sb_cmd* c) {
-    sb_cmd_async(c);
+SB_PHANDLE sb_cmd_async_and_reset(sb_cmd* c) {
+    SB_PHANDLE h = sb_cmd_async(c);
     sb_cmd_clear_args(c);
+    return h;
 }
 
 void sb_cmd_push_args(sb_cmd* c, uint32_t num, ...) {

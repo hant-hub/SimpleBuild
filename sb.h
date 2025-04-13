@@ -11,6 +11,12 @@
 #define SB_MIN_TEXT_SIZE 1
 #define SB_MIN_CMD_NUM 1
 
+#if defined(_WIN32)
+#define SB_PHANDLE void*
+#else
+#define SB_PHANDLE pid_t
+#endif
+
 typedef struct {
     char* textbuffer;
     uint32_t tsize;
@@ -23,11 +29,11 @@ void sb_cmd_clear_args(sb_cmd* c);
 void sb_cmd_free(sb_cmd* c);
 
 int sb_cmd_sync(sb_cmd* c);
-void sb_cmd_async(sb_cmd* c);
+SB_PHANDLE sb_cmd_async(sb_cmd* c);
 int sb_cmd_sync_and_reset(sb_cmd* c);
-void sb_cmd_async_and_reset(sb_cmd* c);
+SB_PHANDLE sb_cmd_async_and_reset(sb_cmd* c);
 
-int sb_cmd_fence();
+int sb_cmd_fence(SB_PHANDLE h);
 
 int sb_should_rebuild(const char* srcpath, const char* binpath);
 void sb_rebuild_self(int argc, char* argv[], const char* srcpath);
