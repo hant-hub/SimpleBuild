@@ -8,8 +8,6 @@
 #ifndef SB_IMPL
 #include "sb.h"
 #endif
-
-
 static uint32_t pendingCommands = 0; 
 
 #if defined(WIN32) || defined(__WIN32__)
@@ -173,4 +171,109 @@ void sb_cmd_free(sb_cmd* c) {
     c->textbuffer = 0;
 }
 
+void sb_cmd_push_chars(sb_cmd* c, uint32_t len, const char* str) {
+    printf("len: %d\n", len);
+    if (c->tsize + len > c->tcap) {
+        uint32_t newsize = c->tcap ? c->tcap : SB_MIN_TEXT_SIZE;
+        while (newsize < c->tsize + len) newsize *= 2;
 
+        c->textbuffer = (char*)realloc(c->textbuffer, newsize);
+        c->tcap = newsize;
+    }
+    //push string
+    char* handle = &c->textbuffer[c->tsize];
+    memcpy(handle, str, len);
+    c->tsize += len;
+}
+
+
+void sb_cmd_pushf(sb_cmd* c, const char* __restrict format, ...) {
+    va_list args;
+    va_start(args, format);
+    
+    uint32_t p = 0; 
+    while (format[p]) {
+        if (format[p] != '%') {
+            sb_cmd_push_chars(c, 1, (char[]){format[p]});
+            p++;
+            continue;
+        }
+        p++;
+
+        switch (format[p]) {
+            case 'x':
+                {
+                    p++;
+                    uint32_t d = va_arg(args, uint32_t);
+                    int numdigits = 0;
+                    uint32_t test = d;
+                    while (test) {
+                        test /= 16;
+                        numdigits += 1;
+                    }
+                    for (int i = numdigits - 1; i >= 0; i--) { 
+                        uint32_t digit = d;
+                        for (int j = 0; j < i; j++) {
+                            digit /= 16;
+                        }
+                        digit %= 16;
+                        if (digit <= 9) { 
+                            sb_cmd_push_chars(c, 1, (char[]){digit + '0'});
+                        } else {
+                            digit -= 10;
+                            sb_cmd_push_chars(c, 1, (char[]){digit + 'a'});
+                        }
+                    }
+                    break;
+                }
+            case 'c':
+                {
+                    p++;
+                    char ch = va_arg(args, int);
+                    sb_cmd_push_chars(c, 1, &ch);
+                    break;
+                }
+            case 'd':
+                {
+                    p++;
+                    int d = va_arg(args, int);
+                    if (d < 0) {
+                        sb_cmd_push_chars(c, 1, "-");
+                        d *= -1;
+                    }
+
+                    int numdigits = 0;
+                    int test = d;
+                    while (test) {
+                        test /= 10;
+                        numdigits += 1;
+                    }
+                    for (int i = numdigits - 1; i >= 0; i--) { 
+                        int digit = d;
+                        for (int j = 0; j < i; j++) {
+                            digit /= 10;
+                        }
+                        digit %= 10;
+                        sb_cmd_push_chars(c, 1, (char[]){digit + '0'});
+                    }
+                    break;
+                }
+            case 's':
+                {
+                    p++;
+                    char* string = va_arg(args, char*);
+                    sb_cmd_push_chars(c, strlen(string), string);
+                    break;
+                }
+            default:
+                {
+                    sb_cmd_push_chars(c, 2, (char[]){format[p-1], format[p]});
+                    p++;
+                }
+        }
+    }
+
+    sb_cmd_push_chars(c, 1, &(char){0});
+    c->asize++;
+    va_end(args);
+}

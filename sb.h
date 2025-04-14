@@ -8,7 +8,7 @@
 #include <stdlib.h>
 
 
-#define SB_MIN_TEXT_SIZE 1
+#define SB_MIN_TEXT_SIZE 32
 #define SB_MIN_CMD_NUM 1
 
 typedef struct {
@@ -32,6 +32,7 @@ int sb_cmd_fence();
 int sb_should_rebuild(const char* srcpath, const char* binpath);
 void sb_rebuild_self(int argc, char* argv[], const char* srcpath);
 
+void sb_cmd_pushf(sb_cmd* c, const char* __restrict format, ...);
 
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
