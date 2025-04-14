@@ -4,7 +4,6 @@
 #include <limits.h>
 #include <time.h>
 #include <stdio.h>
-#include <winerror.h>
 
 #ifndef SB_IMPL
 #include "sb.h"
@@ -22,7 +21,15 @@ static char* compiler = NULL;
 #define _WINCON_
 #include <windows.h>
 #include <processthreadsapi.h>
+#include <timezoneapi.h>
 #include <minwinbase.h>
+#include <fileapi.h>
+#include <errhandlingapi.h>
+#include <winerror.h>
+#include <winnt.h>
+#include <minwindef.h>
+#include <handleapi.h>
+#include <winbase.h>
 
 
 SB_PHANDLE sb_cmd_async(sb_cmd* c) {
@@ -41,11 +48,7 @@ SB_PHANDLE sb_cmd_async(sb_cmd* c) {
     at[0] = 0;
 
     //output command
-    printf("%s", args[0]);
-    for (int i = 1; i < c->asize; i++) {
-        printf(" %s", args[i]);
-    }
-    printf("\n");
+    printf("async: %s\n", c->textbuffer);
     
     STARTUPINFO startInfo;
     ZeroMemory(&startInfo, sizeof(startInfo));
@@ -57,8 +60,6 @@ SB_PHANDLE sb_cmd_async(sb_cmd* c) {
 
     PROCESS_INFORMATION pinfo;
     ZeroMemory(&pinfo, sizeof(PROCESS_INFORMATION));
-
-    LPSTR s;
 
     BOOL success = CreateProcessA(
             NULL,
@@ -74,14 +75,14 @@ SB_PHANDLE sb_cmd_async(sb_cmd* c) {
             );
 
     if (!success) {
-        printf("failed\n");
+        printf("failed: %ld\n", GetLastError());
         return 0;
     }
     CloseHandle(pinfo.hThread);
     return pinfo.hProcess;
 }
 
-int sb_cmd_fence(SB_PHANDLE h) {
+int sb_cmd_wait(SB_PHANDLE h) {
     if (!h) return 0;
     DWORD result = WaitForSingleObject(h, INFINITE);
     return result;
@@ -89,7 +90,90 @@ int sb_cmd_fence(SB_PHANDLE h) {
 
 int sb_cmd_sync(sb_cmd* c) {
     SB_PHANDLE h = sb_cmd_async(c);
-    return sb_cmd_fence(h);
+    return sb_cmd_wait(h);
+}
+
+int sb_should_rebuild(const char* srcpath, const char* binpath) {
+    HANDLE src_fd = CreateFile(srcpath, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE dst_fd = CreateFile(binpath, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+    if (src_fd == INVALID_HANDLE_VALUE) {
+        printf("Failed to Find Source\n");
+        return 0;
+    }
+
+    if (dst_fd == INVALID_HANDLE_VALUE) {
+        printf("Failed to Find Binary\n");
+        //default to rebuild if missing binary
+        return 1;
+    }
+
+    //src time
+    ULARGE_INTEGER src_time;
+    int result = GetFileTime(src_fd, NULL, NULL, (LPFILETIME)&src_time);
+    if (!result) {
+        printf("failed to get source time\n");
+        return 0;
+    }
+
+    //bin time
+    ULARGE_INTEGER bin_time;
+    result = GetFileTime(dst_fd, NULL, NULL, (LPFILETIME)&bin_time);
+    if (!result) {
+        printf("failed to get bin time\n");
+        //default to rebuild if missing
+        return 1;
+    }
+    CloseHandle(src_fd);
+    CloseHandle(dst_fd);
+
+    return bin_time.QuadPart < src_time.QuadPart;
+}
+
+void sb_rebuild_self(int argc, char* argv[], const char* srcpath) {
+    int rebuild = sb_should_rebuild(srcpath, argv[0]);
+    //up to date!!
+    if (!rebuild) {
+        printf("no rebuild\n");
+        return;
+    }
+
+    //rename self 
+    char newBin[MAX_PATH] = {0};
+    snprintf(newBin, sizeof(newBin), "%s.old", argv[0]);
+    if (!MoveFileEx(argv[0], newBin, MOVEFILE_REPLACE_EXISTING)) {
+        printf("Error: %ld\n", GetLastError());
+    }
+
+    sb_cmd* c = &(sb_cmd){0};
+    sb_pick_compiler();
+    sb_cmd_push(c, compiler, srcpath);
+    sb_cmd_sync_and_reset(c);
+
+    //delete obj file
+    char temp[MAX_PATH] = {0};
+    int num = snprintf(temp, sizeof(temp), "%s", argv[0]);
+    while (temp[num] != '.') num--;
+    snprintf(&temp[num], sizeof(temp) - num, ".obj");
+    printf("%s\n", temp);
+    BOOL result = DeleteFile(temp);
+    if (!result) {
+        printf("Failed to delete obj: %ld\n", GetLastError());
+    }
+    
+    //delete .old
+    //doesn't work, maybe later?
+    //result = MoveFileEx(newBin, NULL, MOVEFILE_DELAY_UNTIL_REBOOT);
+    //if (!result) {
+    //    printf("Failed to delete old: %ld\n", GetLastError());
+    //}
+
+    //start new version
+    sb_cmd_push(c, argv[0]);
+    sb_cmd_sync_and_reset(c);
+    exit(0);
+
+    return;
 }
 
 #else
@@ -202,6 +286,26 @@ void sb_cmd_async(sb_cmd* c) {
 
 #endif
 
+void sb_pick_compiler() {
+//TODO(ELI): Add clang and gcc versions for windows
+//TODO(ELI): Add more detection for linux
+#ifdef _WIN32
+    #ifdef _MSC_VER
+        compiler = "cl.exe";
+    #endif
+#else
+        compiler = "cc";
+#endif
+}
+
+void sb_set_compiler(char* str) {
+    compiler = str;
+}
+
+char* sb_compiler() {
+    return compiler;
+}
+
 int sb_cmd_sync_and_reset(sb_cmd* c) {
     int status = sb_cmd_sync(c);
     sb_cmd_clear_args(c);
@@ -215,8 +319,6 @@ SB_PHANDLE sb_cmd_async_and_reset(sb_cmd* c) {
 }
 
 void sb_cmd_push_args(sb_cmd* c, uint32_t num, ...) {
-    //grow textbuffer
-    //printf("%d\n", num);
     va_list args;
     va_start(args, num);
 

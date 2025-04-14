@@ -12,9 +12,9 @@
 #define SB_MIN_CMD_NUM 1
 
 #if defined(_WIN32)
-#define SB_PHANDLE void*
+typedef void* SB_PHANDLE;
 #else
-#define SB_PHANDLE pid_t
+typedef pid_t SB_PSB_PHANDLE;
 #endif
 
 typedef struct {
@@ -33,11 +33,16 @@ SB_PHANDLE sb_cmd_async(sb_cmd* c);
 int sb_cmd_sync_and_reset(sb_cmd* c);
 SB_PHANDLE sb_cmd_async_and_reset(sb_cmd* c);
 
-int sb_cmd_fence(SB_PHANDLE h);
+int sb_cmd_wait(SB_PHANDLE h);
 
 int sb_should_rebuild(const char* srcpath, const char* binpath);
 void sb_rebuild_self(int argc, char* argv[], const char* srcpath);
 
+
+//utility
+void sb_pick_compiler();
+void sb_set_compiler(char* str);
+char* sb_compiler();
 
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
