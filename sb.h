@@ -11,6 +11,12 @@
 #define SB_MIN_TEXT_SIZE 32
 #define SB_MIN_CMD_NUM 1
 
+#if defined(_WIN32)
+typedef void* SB_PHANDLE;
+#else
+typedef pid_t SB_PHANDLE;
+#endif
+
 typedef struct {
     char* textbuffer;
     uint32_t tsize;
@@ -23,16 +29,21 @@ void sb_cmd_clear_args(sb_cmd* c);
 void sb_cmd_free(sb_cmd* c);
 
 int sb_cmd_sync(sb_cmd* c);
-void sb_cmd_async(sb_cmd* c);
+SB_PHANDLE sb_cmd_async(sb_cmd* c);
 int sb_cmd_sync_and_reset(sb_cmd* c);
-void sb_cmd_async_and_reset(sb_cmd* c);
+SB_PHANDLE sb_cmd_async_and_reset(sb_cmd* c);
 
-int sb_cmd_fence();
+int sb_cmd_wait(SB_PHANDLE h);
 
 int sb_should_rebuild(const char* srcpath, const char* binpath);
 void sb_rebuild_self(int argc, char* argv[], const char* srcpath);
 
 void sb_cmd_pushf(sb_cmd* c, const char* __restrict format, ...);
+
+//utility
+void sb_pick_compiler();
+void sb_set_compiler(char* str);
+char* sb_compiler();
 
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
