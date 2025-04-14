@@ -256,7 +256,7 @@ int sb_cmd_fence() {
     return status;
 }
 
-void sb_cmd_async(sb_cmd* c) {
+SB_PHANDLE sb_cmd_async(sb_cmd* c) {
     pendingCommands++;
     char* args[256]; 
     memset(args, 0, sizeof(char*) * (c->asize + 1));
@@ -280,6 +280,7 @@ void sb_cmd_async(sb_cmd* c) {
         execvp(args[0], args);
         exit(1);
     }
+    return cid;
 }
 
 #endif
