@@ -181,6 +181,38 @@ void sb_rebuild_self(int argc, char* argv[], const char* srcpath) {
 #include "fcntl.h"
 #include "sys/stat.h"
 
+SB_FHANDLE sb_fopen(char* file, char* mode) {
+    return fopen(file, mode);
+}
+
+void sb_fclose(SB_FHANDLE h) { 
+    fclose(h);
+}
+
+//set up for now, do more research later,
+//maybe set up automatical console allocation
+//later?
+void sb_fprintf(SB_FHANDLE h, char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    vfprintf(h, format, args);
+    va_end(args);
+}
+
+// Super platform specific
+// definitely needs platform
+// stuff
+// Non-recursive
+void sb_mkdir(char* path) {
+    //full public
+    mkdir(path, S_IRWXU);
+}
+
+// Also platform specific, must implement
+void sb_rename(char* filepath, char* name) {
+    rename(filepath, name);  
+}
+
 int sb_should_rebuild(const char* srcpath, const char* binpath) {
     struct stat srcstat;
     struct stat binstat;
