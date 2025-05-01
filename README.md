@@ -1,3 +1,7 @@
+
+> :warning: This Project is currently under active development and many
+features have not been tested on all target platforms
+
 C based build system inspired by `zig.build`, `nob.h`, and Thomas Borquez'
 `mate.h`. It improves somewhat on `mate.h`'s feature set alongside dropping
 the build.ninja dependency.
@@ -36,13 +40,22 @@ int main(int argc, char* argv[]) {
 - Automatic Build Script Rebuild
 - Compile commands export
 - Default parrellel Command Execution
+- Compiler/Platform Detection
 
 # Future Features:
+- [ ] Platform independent Utilities
+    - [ ] Mkdir
+    - [ ] Chdir
+    - [ ] Find File
+    - [ ] Delete File
 - [ ] Full documentation with multiple examples
-- [ ] toogleable incremental builds
-- [ ] conditional builds
-- [ ] multiple dependencies
+- [ ] Toggleable incremental builds
+- [ ] Conditional builds
+- [ ] Multiple dependencies
 - [ ] Windows Compatability
+    - [ ] MSVC
+    - [ ] GCC MinGW
+    - [ ] Clang
 
 # Tentative Future Features:
 - [ ] Visual Studio SLN generation
