@@ -1,8 +1,49 @@
-To use, just add sb.h and sb.c to your project. The file included can then 
-be programmed to run commands to build your project. Then you can
-manually compile your build tool and thats it.
+C based build system inspired by `zig.build`, `nob.h`, and Thomas Borquez'
+`mate.h`. It improves somewhat on `mate.h`'s feature set alongside dropping
+the build.ninja dependency.
+
+The build system can be used by including `sb.h` in 
+your project. Then include the file in a build script which
+can be given any name. You can then write your build script
+and use it to compile your project.
+
+Here is an example build script:
+
+```c
+#define SB_IMPL
+#include "sb.h"
+
+
+int main(int argc, char* argv[]) {
+
+    sb_BUILD(argc, argv) {
+        sb_EXEC() {
+            sb_add_file("test.c");
+
+            sb_link_library("vulkan");
+
+            sb_set_out("testapp");
+            sb_set_optmize(0);
+            sb_export_command();
+        }
+    }
+    return 0;
+}
+```
+
 
 # Current Features:
-
 - Automatic Build Script Rebuild
 - Compile commands export
+- Default parrellel Command Execution
+
+# Future Features:
+- [ ] Full documentation with multiple examples
+- [ ] toogleable incremental builds
+- [ ] conditional builds
+- [ ] multiple dependencies
+- [ ] Windows Compatability
+
+# Tentative Future Features:
+- [ ] Visual Studio SLN generation
+- [ ] MacOS Compabatility

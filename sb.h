@@ -62,6 +62,11 @@ uint32_t sb_strcmp(const char* s1, const char* s2);
 //Sized
 void sb_strcpy(char* dst, const sb_sized_string s);
 
+
+/*
+ * Non specific Build Functions
+ */
+
 int sb_build_start();
 void sb_build_end();
 
@@ -72,8 +77,10 @@ void _sb_cmd_main(sb_sized_string cmd);
 void _sb_cmd_opt(sb_sized_string opt);
 uint32_t _sb_cmd_arg(sb_sized_string arg);
 
-
 void sb_autobuild(int argc, char* argv[], char* src);
+
+/* forces all previous commands to finish before continuing*/
+void sb_fence();
 
 
 /*
@@ -190,8 +197,8 @@ void sb_dry_run();
 #include <stdarg.h>
 
 typedef struct sb_cmd {
-    uint32_t start;
-    uint32_t length;
+    int32_t start;
+    int32_t length;
 } sb_cmd;
 
 typedef struct sb_cmd_list {
@@ -340,6 +347,7 @@ int sb_build_start() {
     cmd_list.size = 0;
     cmd_list.isize = 0;
 
+    curr_exe = (exe_info){0};
 
 
     return 0;
@@ -351,9 +359,16 @@ void sb_build_end() {
     //in parrallel
     
     for (uint32_t i = 0; i < cmd_list.isize; i++) {
+        sb_cmd idx = cmd_list.indicies[i];
+        
+        if (idx.start < 0) {
+            //fence
+            while (waitpid(0, NULL, 0) > 0);
+            continue;
+        }
+
         pid_t p = fork();
         if (p) continue;
-        sb_cmd idx = cmd_list.indicies[i];
         char* file = &cmd_list.cmd[idx.start];
         
         //build list
@@ -362,10 +377,12 @@ void sb_build_end() {
         char* cur = &cmd_list.cmd[idx.start];
         for (uint32_t j = 0; j < idx.length; j++) {
             args[j] = cur;
+            printf("%s ", cur);
             //consume
             while (cur[0]) cur++;
             cur++;
         }
+        printf("\n");
 
         args[idx.length] = 0;
         execvp(file, args);
@@ -487,6 +504,17 @@ void sb_autobuild(int argc, char* argv[], char* src) {
     }
 }
 
+void sb_fence() {
+    if (cmd_list.isize + 1 > cmd_list.icap) {
+        cmd_list.icap = cmd_list.icap ? cmd_list.icap * 2 : 16;
+        cmd_list.indicies = sb_realloc(cmd_list.indicies, cmd_list.icap * sizeof(sb_cmd));
+    }
+
+    cmd_list.indicies[cmd_list.isize++] = (sb_cmd){
+        .start = -1
+    };
+}
+
 int sb_start_exec() {
     sb_cmd_start();
     _sb_cmd_main(compiler);
@@ -604,8 +632,10 @@ void sb_stop_exec() {
 
     }
 
-
     sb_cmd_end();
+    curr_exe.fsize = 0;
+    curr_exe.export_commands = 0;
+    curr_exe.dry = 0;
 }
 
 
