@@ -1,0 +1,7 @@
+[
+{
+	"directory": "/home/ehantman/Desktop/repos/simplebuild",
+	"file": "sb.h",
+	"arguments": ["cc", "tests/test.c", "-D", "SB_IMPL", "-o",  "build/test"],
+}
+]

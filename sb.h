@@ -58,6 +58,7 @@ typedef struct sb_sized_string {
 //Null terminated
 uint32_t sb_strlen(const char* s);
 uint32_t sb_strcmp(const char* s1, const char* s2);
+char* sb_basename(char* f);
 
 //Sized
 void sb_strcpy(char* dst, const sb_sized_string s);
@@ -78,6 +79,7 @@ void _sb_cmd_opt(sb_sized_string opt);
 uint32_t _sb_cmd_arg(sb_sized_string arg);
 
 void sb_autobuild(int argc, char* argv[], char* src);
+int sb_cmptime(const char* f1, const char* f2);
 
 /* forces all previous commands to finish before continuing*/
 void sb_fence();
@@ -91,7 +93,10 @@ int sb_start_exec();
 void sb_stop_exec();
 
 void _sb_add_file(sb_sized_string f);
+void _sb_add_header(sb_sized_string f);
 void _sb_set_out(sb_sized_string f);
+void _sb_target_dir(sb_sized_string f);
+void _sb_add_flag(sb_sized_string f);
 
 void _sb_add_include_path(sb_sized_string f);
 void _sb_add_library_path(sb_sized_string f);
@@ -99,6 +104,8 @@ void _sb_link_library(sb_sized_string f);
 
 void sb_set_optmize(uint32_t level);
 void sb_export_command();
+void sb_set_incremental();
+void sb_set_debug();
 
  /* 
  * will run through build logic but won't submit to 
@@ -146,8 +153,26 @@ void sb_dry_run();
             .size = sb_strlen(x),\
     })
 
+#define sb_add_header(x) \
+    _sb_add_header((sb_sized_string){ \
+            .string = x,\
+            .size = sb_strlen(x),\
+    })
+
 #define sb_set_out(x) \
     _sb_set_out((sb_sized_string){ \
+            .string = x,\
+            .size = sb_strlen(x),\
+    })
+
+#define sb_add_flag(x) \
+    _sb_add_flag((sb_sized_string){ \
+            .string = x,\
+            .size = sb_strlen(x),\
+    })
+
+#define sb_target_dir(x) \
+    _sb_target_dir((sb_sized_string){ \
             .string = x,\
             .size = sb_strlen(x),\
     })
@@ -270,6 +295,13 @@ uint32_t sb_strcmp(const char* s1, const char* s2) {
     return strcmp(s1, s2);
 }
 
+char* sb_basename(char* f) {
+    char* stripped = f;
+    while (stripped[0] && stripped[0] != '/') stripped++;
+    if (!stripped[0]) return f;
+    return stripped + 1;
+}
+
 void* sb_alloc(uint64_t size) {
     return malloc(size);
 }
@@ -278,6 +310,26 @@ void* sb_realloc(void* p, uint64_t size) {
 }
 void sb_free(void* p) {
     return free(p);
+}
+
+int sb_cmptime(const char* binary, const char* source) {
+    struct stat file1 = {0};
+    struct stat file2 = {0};
+
+    int a = stat(binary, &file1);
+    int b = stat(source, &file2);
+
+    if (b) {
+        printf("Source Not Found\n");
+        exit(-1);
+    }
+
+    if (a) {
+        printf("Binary Not Found\n");
+        return 1;
+    }
+    
+    return file1.st_mtim.tv_sec < file2.st_mtim.tv_sec;
 }
 
 /* ----------------------------------------------------
@@ -291,20 +343,37 @@ void sb_free(void* p) {
 typedef struct exe_info {
     int export_commands;
     int dry;
+    int incremental;
 
-    //for each file, store the index,
-    //so that we can create a compile
-    //commands entry
+    //unique options
+    uint32_t output;
 
+    //options
+    uint32_t osize;
+    uint32_t ocap;
+    uint32_t* options;
+
+    //headers
+    uint32_t hsize;
+    uint32_t hcap;
+    uint32_t* headers;
+
+    //indicies for source files
     uint32_t fsize;
     uint32_t fcap;
     uint32_t* files;
-} exe_info;
 
+    //raw text
+    uint32_t tsize;
+    uint32_t tcap;
+    char* text;
+} exe_info;
 
 sb_cmd_list cmd_list = {0};
 sb_cmd curr_cmd = {0};
-exe_info curr_exe = {0};
+exe_info curr_exe;
+
+char build_dir[PATH_MAX] = {0};
 
 #ifdef _MSC_VER
 int compile_cmds = NULL;
@@ -327,7 +396,7 @@ sb_sized_string compiler = (sb_sized_string) {
 };
 #elif defined(__GNUC__)
 //gcc
-sb_sized_string compiler = (sb_sized_string) {
+const sb_sized_string compiler = {
     .string = "cc",
     .size = 2
 };
@@ -346,7 +415,6 @@ int sb_build_start() {
     //don't mess with pointers
     cmd_list.size = 0;
     cmd_list.isize = 0;
-
     curr_exe = (exe_info){0};
 
 
@@ -363,7 +431,18 @@ void sb_build_end() {
         
         if (idx.start < 0) {
             //fence
-            while (waitpid(0, NULL, 0) > 0);
+            int status;
+            while (waitpid(0, &status, 0) > 0) {
+                if (!WIFEXITED(status)) {
+                    printf("Error: %d\n", status);
+                    exit(-1);
+                }
+                if (WEXITSTATUS(status)) {
+                    printf("Nonzero Exit: %d\n", status);
+                    exit(-1);
+                }
+                
+            }
             continue;
         }
 
@@ -386,8 +465,22 @@ void sb_build_end() {
 
         args[idx.length] = 0;
         execvp(file, args);
+        printf("Failed to Run Command\n");
+        exit(-1);
     }
-    while (waitpid(0, NULL, 0) > 0);
+
+    int status;
+    while (waitpid(0, &status, 0) > 0){
+        if (!WIFEXITED(status)) {
+            printf("Error: %d\n", status);
+            exit(-1);
+        }
+        if (WEXITSTATUS(status)) {
+            printf("Nonzero Exit: %d\n", status);
+            exit(-1);
+        }
+    }
+
 
     if (compile_cmds) {
         sb_fprintf(compile_cmds, "\n]\n");
@@ -431,7 +524,7 @@ void _sb_cmd_main(sb_sized_string cmd) {
 
 void _sb_cmd_opt(sb_sized_string opt) {
     curr_cmd.length++;
-    if (cmd_list.size + opt.size + 2 > cmd_list.cap) {
+    if (cmd_list.size + opt.size + 5 > cmd_list.cap) {
         cmd_list.cap = cmd_list.cap ? cmd_list.cap * 2 : 256;
         cmd_list.cmd = sb_realloc(cmd_list.cmd, cmd_list.cap);
     }
@@ -466,29 +559,20 @@ uint32_t _sb_cmd_arg(sb_sized_string arg) {
 }
 
 void sb_autobuild(int argc, char* argv[], char* src) {
+    return;
     //test if should rebuild
-    
-    struct stat srcinfo;
-    struct stat bininfo;
-
-    stat(argv[0], &bininfo);
-    stat(src, &srcinfo);
-
     //rebuild based on compiler
-    int rebuild = 0;
+    int rebuild = 0; 
+    int should_rebuild = sb_cmptime(argv[0], src);
     sb_EXEC() {
         sb_add_file(src);
         sb_set_out(argv[0]);
+        sb_add_header("sb.h");
 
         sb_export_command();
-        if (srcinfo.st_mtim.tv_sec <= bininfo.st_mtim.tv_sec) {
+        if (!should_rebuild) {
             printf("No Rebuild\n");
-            sb_dry_run();
-            sb_stop_exec();
-            sb_start_exec();
-            sb_set_out(argv[0]);
             sb_cmd_opt("DSB_IMPL");
-            sb_add_file("sb.h");
             sb_dry_run();
             sb_export_command();
         } else {
@@ -499,7 +583,6 @@ void sb_autobuild(int argc, char* argv[], char* src) {
 
     if (rebuild) {
         sb_build_end();
-
         execlp(argv[0], argv[0], NULL);
     }
 }
@@ -516,48 +599,97 @@ void sb_fence() {
 }
 
 int sb_start_exec() {
-    sb_cmd_start();
-    _sb_cmd_main(compiler);
     curr_exe.fsize = 0;
     curr_exe.export_commands = 0;
     curr_exe.dry = 0;
+    curr_exe.tsize = 0;
+    curr_exe.osize = 0;
+    curr_exe.incremental = 0;
+    curr_exe.output = UINT32_MAX;
 
     return 0;
 }
 
-//TODO(ELI): push exec index into exe info
-void _sb_add_file(sb_sized_string f) {
-    uint32_t index = _sb_cmd_arg(f);
-    if (curr_exe.fsize + 1 > curr_exe.fcap) {
-        curr_exe.fcap = curr_exe.fcap ? curr_exe.fcap * 2 : 2;
-        curr_exe.files = sb_realloc(curr_exe.files, curr_exe.fcap);
+void _sb_add_header(sb_sized_string f) {
+    if (curr_exe.tsize + f.size + 1 > curr_exe.tcap) {
+        curr_exe.tcap = curr_exe.tcap ? curr_exe.tcap * 2 : 256;
+        curr_exe.text = sb_realloc(curr_exe.text, curr_exe.tcap);
     }
 
-    curr_exe.files[curr_exe.fsize++] = index;
+    if (curr_exe.hsize + 1 > curr_exe.hcap) {
+        curr_exe.hcap = curr_exe.hcap ? curr_exe.hcap * 2 : 2;
+        curr_exe.headers = sb_realloc(curr_exe.headers, curr_exe.hcap * sizeof(uint32_t));
+    }
+
+    curr_exe.headers[curr_exe.hsize++] = curr_exe.tsize;
+    sb_strcpy(&curr_exe.text[curr_exe.tsize], f);
+    curr_exe.tsize += f.size;
+    curr_exe.text[curr_exe.tsize] = 0;
+    curr_exe.tsize++;
+}
+
+void _sb_add_file(sb_sized_string f) {
+    if (curr_exe.tsize + f.size + 1 > curr_exe.tcap) {
+        curr_exe.tcap = curr_exe.tcap ? curr_exe.tcap * 2 : 256;
+        curr_exe.text = sb_realloc(curr_exe.text, curr_exe.tcap);
+    }
+
+    if (curr_exe.fsize + 1 > curr_exe.fcap) {
+        curr_exe.fcap = curr_exe.fcap ? curr_exe.fcap * 2 : 2;
+        curr_exe.files = sb_realloc(curr_exe.files, curr_exe.fcap * sizeof(uint32_t));
+    }
+
+    curr_exe.files[curr_exe.fsize++] = curr_exe.tsize;
+    sb_strcpy(&curr_exe.text[curr_exe.tsize], f);
+    curr_exe.tsize += f.size;
+    curr_exe.text[curr_exe.tsize] = 0;
+    curr_exe.tsize++;
+}
+
+void _sb_target_dir(sb_sized_string f) {
+    snprintf(build_dir, sizeof(build_dir), "%s", f.string);
 }
 
 void _sb_set_out(sb_sized_string f) {
-    sb_cmd_opt("o");
-    _sb_cmd_arg(f);
+    if (curr_exe.tsize + f.size + 1 > curr_exe.tcap) {
+        curr_exe.tcap = curr_exe.tcap ? curr_exe.tcap * 2 : 256;
+        curr_exe.text = sb_realloc(curr_exe.text, curr_exe.tcap);
+    }
+
+    curr_exe.output = curr_exe.tsize;
+    sb_strcpy(&curr_exe.text[curr_exe.tsize], f);
+    curr_exe.tsize += f.size;
+    curr_exe.text[curr_exe.tsize] = 0;
+    curr_exe.tsize++;
+}
+
+void _sb_add_flag(sb_sized_string f) {
+
+    if (curr_exe.tsize + f.size + 1 > curr_exe.tcap) {
+        curr_exe.tcap = curr_exe.tcap ? curr_exe.tcap * 2 : 2;
+        curr_exe.text = sb_realloc(curr_exe.text, curr_exe.tcap);
+    }
+
+    if (curr_exe.osize + 1 > curr_exe.ocap) {
+        curr_exe.ocap = curr_exe.ocap ? curr_exe.ocap * 2 : 2;
+        curr_exe.options = sb_realloc(curr_exe.options, curr_exe.ocap * sizeof(uint32_t));
+    }
+
+    curr_exe.options[curr_exe.osize++] = curr_exe.tsize;
+    sb_strcpy(&curr_exe.text[curr_exe.tsize], f);
+    curr_exe.tsize += f.size;
+    curr_exe.text[curr_exe.tsize] = 0;
+    curr_exe.tsize++;
+}
+
+void sb_set_incremental() {
+    curr_exe.incremental = 1;
+}
+
+void sb_set_debug() {
 }
 
 void sb_set_optmize(uint32_t level) {
-    char* op;
-    switch (level) {
-        default:
-        case 0: return;
-
-        case 1: op = "O1"; 
-                break;
-        case 2: op = "O2";
-                break;
-        case 3: op = "O3";
-                break;
-    }
-    _sb_cmd_opt((sb_sized_string){
-            .string = op,
-            .size = sb_strlen(op)
-    });
 }
 
 //TODO(ELI): Look into automatically enclosing
@@ -576,10 +708,7 @@ void _sb_add_library_path(sb_sized_string f) {
 void _sb_link_library(sb_sized_string f) {
     char cmd[128] = {0};
     snprintf(cmd, sizeof(cmd), "l%s", f.string);
-    _sb_cmd_opt((sb_sized_string){
-            .string = cmd,
-            .size = sb_strlen(cmd),
-    });
+    sb_add_flag(cmd);
 }
 
 void sb_export_command() {
@@ -593,21 +722,70 @@ void sb_dry_run() {
 //TODO(ELI): Set up to add a compile_commands
 //entry for each file in the executable.
 void sb_stop_exec() {
+
+    printf("Source Files\n");
+    for (int i = 0; i < curr_exe.fsize; i++) {
+        printf("\t%s\n", &curr_exe.text[curr_exe.files[i]]);
+    }
+
+    printf("Header Files\n");
+    for (int i = 0; i < curr_exe.hsize; i++) {
+        printf("\t%s\n", &curr_exe.text[curr_exe.headers[i]]);
+    }
+
+    printf("Output\n");
+    printf("\t%s\n", &curr_exe.text[curr_exe.output]);
+
+    printf("Flags\n");
+    for (int i = 0; i < curr_exe.osize; i++) {
+        printf("\t%s\n", &curr_exe.text[curr_exe.options[i]]);
+    }
+
+
+    if (!curr_exe.incremental) {
+        sb_CMD() {
+            _sb_cmd_main(compiler);
+            //flags            
+            for (uint32_t i = 0; i < curr_exe.osize; i++) {
+                sb_cmd_opt(&curr_exe.text[curr_exe.options[i]]);
+            }
+
+            //sources files
+            for (uint32_t i = 0; i < curr_exe.fsize; i++) {
+                sb_cmd_arg(&curr_exe.text[curr_exe.files[i]]);
+            }
+
+            //output
+            sb_cmd_opt("o");
+            sb_cmd_arg(&curr_exe.text[curr_exe.output]);
+        }
+    } else {
+        printf("Not Implemented!\n");
+    }
+
+
     if (curr_exe.export_commands) {
         //write out compile_commands file
         if (!compile_cmds) {
-            compile_cmds = sb_open("compile_commands.json", sbf_WRITE, sbf_CREATE | sbf_TRUNC);
+            compile_cmds = sb_open("test.json", sbf_WRITE, sbf_CREATE | sbf_TRUNC);
             sb_fprintf(compile_cmds, "[\n");
         } else {
             sb_fprintf(compile_cmds, ",\n");
         }
+        return;
 
-        for (int i = 0; i < curr_exe.fsize; i++) {
+        char* filep = curr_exe.text;
+        while (filep - curr_exe.text < curr_exe.tsize) {
             sb_fprintf(compile_cmds, "{\n");
 
             sb_fprintf(compile_cmds, "\t\"directory\": \"%s\",\n", sb_get_cwd());
-            sb_fprintf(compile_cmds, "\t\"file\": \"%s\",\n", &cmd_list.cmd[curr_exe.files[i]] );
+            sb_fprintf(compile_cmds, "\t\"file\": \"%s\",\n", filep);
             sb_fprintf(compile_cmds, "\t\"arguments\": [");
+
+            //advance filep
+            //printf("hit: %s\n", filep);
+            while (filep[0]) filep++;
+            filep++;
 
             sb_cmd idx = curr_cmd;
             char* cur = &cmd_list.cmd[idx.start];
@@ -625,17 +803,20 @@ void sb_stop_exec() {
             sb_fprintf(compile_cmds, "],\n");
             sb_fprintf(compile_cmds, "}");
 
-            if (i + 1 < curr_exe.fsize) {
+            if (filep - curr_exe.text + 1 < curr_exe.tsize) {
                 sb_fprintf(compile_cmds, ",\n");
             }
         }
 
     }
 
-    sb_cmd_end();
     curr_exe.fsize = 0;
     curr_exe.export_commands = 0;
     curr_exe.dry = 0;
+    curr_exe.tsize = 0;
+    curr_exe.osize = 0;
+    curr_exe.incremental = 0;
+    curr_exe.output = UINT32_MAX;
 }
 
 
