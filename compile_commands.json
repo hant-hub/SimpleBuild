@@ -21,7 +21,7 @@
 },
 {
 	"directory": "/home/ehantman/Desktop/repos/simplebuild",
-	"file": "s/testsrc2.c",
+	"file": "sb.h",
 	"arguments": ["cc", "-g", "tests/testsrc.c", "tests/testsrc2.c", "-o", "build//app"]
 }
 ]

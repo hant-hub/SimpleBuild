@@ -50,8 +50,9 @@ int main(int argc, char* argv[]) {
     - [ ] Delete File
 - [ ] Full documentation with multiple examples
 - [x] Toggleable incremental builds
+- [ ] Support for Compiler Include Dependencies
+- [ ] Recursive File Search
 - [ ] Conditional builds
-- [ ] Multiple dependencies
 - [ ] Windows Compatability
     - [ ] MSVC
     - [ ] GCC MinGW

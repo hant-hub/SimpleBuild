@@ -13,6 +13,8 @@ int main(int argc, char* argv[]) {
             sb_add_file("tests/testsrc.c");
             sb_add_file("tests/testsrc2.c");
 
+            sb_add_header("sb.h");
+
             sb_add_flag("g");
 
             sb_set_incremental();

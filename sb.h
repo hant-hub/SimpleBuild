@@ -633,6 +633,7 @@ int sb_start_exec() {
     curr_exe.dry = 0;
     curr_exe.tsize = 0;
     curr_exe.osize = 0;
+    curr_exe.hsize = 0;
     curr_exe.incremental = 0;
     curr_exe.output = UINT32_MAX;
 
@@ -794,25 +795,6 @@ void write_command_entry(char* filep) {
 //entry for each file in the executable.
 void sb_stop_exec() {
 
-    //printf("Source Files\n");
-    //for (int i = 0; i < curr_exe.fsize; i++) {
-    //   sb_printf("\t%s\n", &curr_exe.text[curr_exe.files[i]]);
-    //}
-
-    //printf("Header Files\n");
-    //for (int i = 0; i < curr_exe.hsize; i++) {
-    //   sb_printf("\t%s\n", &curr_exe.text[curr_exe.headers[i]]);
-    //}
-
-    //printf("Output\n");
-    //printf("\t%s\n", &curr_exe.text[curr_exe.output]);
-
-    //printf("Flags\n");
-    //for (int i = 0; i < curr_exe.osize; i++) {
-    //   sb_printf("\t%s\n", &curr_exe.text[curr_exe.options[i]]);
-    //}
-
-
     if (!curr_exe.incremental) {
         sb_CMD() {
             _sb_cmd_main(compiler);
@@ -838,8 +820,8 @@ void sb_stop_exec() {
             sb_snprintf(binname, sizeof(binname), "%s%s.o", build_dir, sb_basename(&curr_exe.text[curr_exe.files[subfile]]));
 
             int should_build = sb_cmptime(binname, &curr_exe.text[curr_exe.files[subfile]]);
-            sb_printf("building: %s\n", binname);
             if (!should_build) continue;
+            sb_printf("building: %s\n", binname);
             sb_CMD() {
                 _sb_cmd_main(compiler);
                 //flags            
@@ -862,6 +844,12 @@ void sb_stop_exec() {
             char binname[PATH_MAX] = {0};
             sb_snprintf(binname, sizeof(binname), "%s%s.o", build_dir, sb_basename(&curr_exe.text[curr_exe.files[i]]));
             should_build |= sb_cmptime(binname, &curr_exe.text[curr_exe.files[i]]);
+        }
+
+        for (uint32_t i = 0; i < curr_exe.hsize; i++) {
+            char binname[PATH_MAX] = {0};
+            sb_snprintf(binname, sizeof(binname), "%s%s", build_dir, &curr_exe.text[curr_exe.output]);
+            should_build |= sb_cmptime(binname, &curr_exe.text[curr_exe.headers[i]]);
         }
 
         if (should_build) {
@@ -919,6 +907,7 @@ void sb_stop_exec() {
     curr_exe.dry = 0;
     curr_exe.tsize = 0;
     curr_exe.osize = 0;
+    curr_exe.hsize = 0;
     curr_exe.incremental = 0;
     curr_exe.output = UINT32_MAX;
 }
