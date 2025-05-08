@@ -6,6 +6,7 @@
 int main(int argc, char* argv[]) {
     sb_BUILD(argc, argv) {
         sb_target_dir("build/");
+        sb_mkdir("build");
         sb_EXEC() {
             sb_set_out("app");
 

@@ -21,7 +21,7 @@
 #ifdef _MSC_VER
 typedef void* FHANDLE;
 #else
-typedef int FHANDLE;
+typedef int sb_file;
 #endif
 
 typedef enum sb_file_mode {
@@ -36,10 +36,17 @@ typedef enum sb_file_flags {
     sbf_TRUNC,
 } sb_file_flags;
 
-//file system
-FHANDLE sb_open(char* file, sb_file_mode mode, sb_file_flags flags);
-void sb_fprintf(FHANDLE f, char* format, ...);
-void sb_close(FHANDLE f);
+//platform utilities
+sb_file sb_open(char* file, sb_file_mode mode, sb_file_flags flags);
+void sb_close(sb_file f);
+
+void sb_mkdir(char* name);
+
+void sb_fprintf(sb_file f, char* format, ...);
+void sb_printf(char* format, ...);
+void sb_snprintf(void* dst, uint32_t max, char* format, ...);
+
+void sb_exit(int status);
 
 char* sb_get_cwd();
 
@@ -105,9 +112,8 @@ void _sb_link_library(sb_sized_string f);
 void sb_set_optmize(uint32_t level);
 void sb_export_command();
 void sb_set_incremental();
-void sb_set_debug();
 
- /* 
+/* 
  * will run through build logic but won't submit to 
  * execution list. Useful for creating compile
  * commands without actually compiling
@@ -118,7 +124,7 @@ void sb_dry_run();
 
 /*
  * Spooky Macros
-*/
+ */
 
 #define sb_BUILD(argc, argv) \
     for (int i = (sb_build_start(), sb_autobuild(argc, argv, __FILE__), 0); i == 0; (sb_build_end(), i++))
@@ -133,67 +139,67 @@ void sb_dry_run();
     _sb_add_include_path((sb_sized_string){ \
             .string = x,\
             .size = sb_strlen(x),\
-    })
+            })
 
 #define sb_add_library_path(x) \
     _sb_add_library_path((sb_sized_string){ \
             .string = x,\
             .size = sb_strlen(x),\
-    })
+            })
 
 #define sb_link_library(x) \
     _sb_link_library((sb_sized_string){ \
             .string = x,\
             .size = sb_strlen(x),\
-    })
+            })
 
 #define sb_add_file(x) \
     _sb_add_file((sb_sized_string){ \
             .string = x,\
             .size = sb_strlen(x),\
-    })
+            })
 
 #define sb_add_header(x) \
     _sb_add_header((sb_sized_string){ \
             .string = x,\
             .size = sb_strlen(x),\
-    })
+            })
 
 #define sb_set_out(x) \
     _sb_set_out((sb_sized_string){ \
             .string = x,\
             .size = sb_strlen(x),\
-    })
+            })
 
 #define sb_add_flag(x) \
     _sb_add_flag((sb_sized_string){ \
             .string = x,\
             .size = sb_strlen(x),\
-    })
+            })
 
 #define sb_target_dir(x) \
     _sb_target_dir((sb_sized_string){ \
             .string = x,\
             .size = sb_strlen(x),\
-    })
+            })
 
 #define sb_cmd_main(x) \
     _sb_cmd_main((sb_sized_string){ \
             .string = x,\
             .size = sb_strlen(x),\
-    })
+            })
 
 #define sb_cmd_opt(x) \
     _sb_cmd_opt((sb_sized_string){ \
             .string = x,\
             .size = sb_strlen(x),\
-    })
+            })
 
 #define sb_cmd_arg(x) \
     _sb_cmd_arg((sb_sized_string){ \
             .string = x,\
             .size = sb_strlen(x),\
-    })
+            })
 
 #ifdef SB_IMPL
 /*
@@ -238,7 +244,7 @@ typedef struct sb_cmd_list {
     sb_cmd* indicies;
 } sb_cmd_list;
 
-FHANDLE sb_open(char* file, sb_file_mode mode, sb_file_flags flags) {
+sb_file sb_open(char* file, sb_file_mode mode, sb_file_flags flags) {
     int o_mode = 0;
     switch (mode) {
         case sbf_READ: 
@@ -266,21 +272,45 @@ FHANDLE sb_open(char* file, sb_file_mode mode, sb_file_flags flags) {
 char cwd[PATH_MAX] = {0}; 
 
 char* sb_get_cwd() {
-   if (!cwd[0]) {
+    if (!cwd[0]) {
         getcwd(cwd, PATH_MAX);    
-   }
-   return cwd;
+    }
+    return cwd;
 }
 
-void sb_fprintf(FHANDLE f, char* format, ...) {
+
+void sb_exit(int status) {
+   sb_exit(status);
+}
+
+
+void sb_fprintf(sb_file f, char* format, ...) {
     va_list args;
     va_start(args, format);
     vdprintf(f, format, args);
     va_end(args);
 }
 
-void sb_close(FHANDLE f) {
+void sb_printf(char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+}
+
+void sb_snprintf(void* dst, uint32_t max, char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    vsnprintf(dst, max, format, args);
+    va_end(args);
+}
+
+void sb_close(sb_file f) {
     close(f);
+}
+
+void sb_mkdir(char* name) {
+    mkdir(name, 0777);
 }
 
 void sb_strcpy(char* dst, const sb_sized_string s) {
@@ -320,15 +350,15 @@ int sb_cmptime(const char* binary, const char* source) {
     int b = stat(source, &file2);
 
     if (b) {
-        printf("Source Not Found\n");
-        exit(-1);
+        sb_printf("Source Not Found\n");
+       sb_exit(-1);
     }
 
     if (a) {
-        printf("Binary Not Found\n");
+        sb_printf("Binary Not Found\n");
         return 1;
     }
-    
+
     return file1.st_mtim.tv_sec < file2.st_mtim.tv_sec;
 }
 
@@ -337,7 +367,7 @@ int sb_cmptime(const char* binary, const char* source) {
  *
  * VERY IMPORTANT
  *
-*/
+ */
 
 //may expand later
 typedef struct exe_info {
@@ -381,7 +411,7 @@ int compile_cmds = NULL;
 char separator = ' ';
 char flag = '/';
 #else
-int compile_cmds = 0;
+sb_file compile_cmds = 0;
 
 char separator = 0;
 char flag = '-';
@@ -392,7 +422,7 @@ char flag = '-';
 //msvc
 sb_sized_string compiler = (sb_sized_string) {
     .string = "cl.exe",
-    .size = 6
+        .size = 6
 };
 #elif defined(__GNUC__)
 //gcc
@@ -404,7 +434,7 @@ const sb_sized_string compiler = {
 //clang
 sb_sized_string compiler = (sb_sized_string) {
     .string = "clang",
-    .size = 5
+        .size = 5
 };
 #endif
 
@@ -425,23 +455,23 @@ int sb_build_start() {
 void sb_build_end() {
     //execute commands
     //in parrallel
-    
+
     for (uint32_t i = 0; i < cmd_list.isize; i++) {
         sb_cmd idx = cmd_list.indicies[i];
-        
+
         if (idx.start < 0) {
             //fence
             int status;
             while (waitpid(0, &status, 0) > 0) {
                 if (!WIFEXITED(status)) {
-                    printf("Error: %d\n", status);
-                    exit(-1);
+                    sb_printf("Error: %d\n", status);
+                   sb_exit(-1);
                 }
                 if (WEXITSTATUS(status)) {
-                    printf("Nonzero Exit: %d\n", status);
-                    exit(-1);
+                    sb_printf("Nonzero Exit: %d\n", status);
+                   sb_exit(-1);
                 }
-                
+
             }
             continue;
         }
@@ -449,35 +479,35 @@ void sb_build_end() {
         pid_t p = fork();
         if (p) continue;
         char* file = &cmd_list.cmd[idx.start];
-        
+
         //build list
         char** args = sb_alloc(sizeof(char*) * idx.length + 1);
 
         char* cur = &cmd_list.cmd[idx.start];
         for (uint32_t j = 0; j < idx.length; j++) {
             args[j] = cur;
-            printf("%s ", cur);
+            sb_printf("%s ", cur);
             //consume
             while (cur[0]) cur++;
             cur++;
         }
-        printf("\n");
+        sb_printf("\n");
 
         args[idx.length] = 0;
         execvp(file, args);
-        printf("Failed to Run Command\n");
-        exit(-1);
+        sb_printf("Failed to Run Command\n");
+       sb_exit(-1);
     }
 
     int status;
     while (waitpid(0, &status, 0) > 0){
         if (!WIFEXITED(status)) {
-            printf("Error: %d\n", status);
-            exit(-1);
+            sb_printf("Error: %d\n", status);
+           sb_exit(-1);
         }
         if (WEXITSTATUS(status)) {
-            printf("Nonzero Exit: %d\n", status);
-            exit(-1);
+            sb_printf("Nonzero Exit: %d\n", status);
+           sb_exit(-1);
         }
     }
 
@@ -499,7 +529,7 @@ void sb_cmd_end() {
         cmd_list.icap = cmd_list.icap ? cmd_list.icap * 2 : 16;
         cmd_list.indicies = sb_realloc(cmd_list.indicies, cmd_list.icap * sizeof(sb_cmd));
     }
-    
+
     if (curr_exe.fsize && curr_exe.dry) {
         cmd_list.size = curr_cmd.start;
         return;
@@ -528,7 +558,7 @@ void _sb_cmd_opt(sb_sized_string opt) {
         cmd_list.cap = cmd_list.cap ? cmd_list.cap * 2 : 256;
         cmd_list.cmd = sb_realloc(cmd_list.cmd, cmd_list.cap);
     }
-    
+
     cmd_list.cmd[cmd_list.size - 1] = separator;
     cmd_list.cmd[cmd_list.size++] = flag;
 
@@ -570,13 +600,13 @@ void sb_autobuild(int argc, char* argv[], char* src) {
 
         sb_export_command();
         if (!should_rebuild) {
-            printf("No Rebuild\n");
+            sb_printf("No Rebuild\n");
             sb_add_flag("DSB_IMPL");
             sb_dry_run();
             sb_export_command();
         } else {
             rebuild = 1;
-            printf("Rebuild\n");
+            sb_printf("Rebuild\n");
         }
     }
 
@@ -646,7 +676,7 @@ void _sb_add_file(sb_sized_string f) {
 }
 
 void _sb_target_dir(sb_sized_string f) {
-    snprintf(build_dir, sizeof(build_dir), "%s", f.string);
+    sb_snprintf(build_dir, sizeof(build_dir), "%s", f.string);
 }
 
 void _sb_set_out(sb_sized_string f) {
@@ -685,10 +715,22 @@ void sb_set_incremental() {
     curr_exe.incremental = 1;
 }
 
-void sb_set_debug() {
-}
-
 void sb_set_optmize(uint32_t level) {
+    switch(level) {
+        case 1:
+            {
+                sb_add_flag("O1");
+            } break;
+        case 2:
+            {
+                sb_add_flag("O2");
+            } break;
+        case 3:
+            {
+                sb_add_flag("O3");
+            } break;
+        default: break;
+    }
 }
 
 //TODO(ELI): Look into automatically enclosing
@@ -706,7 +748,7 @@ void _sb_add_library_path(sb_sized_string f) {
 
 void _sb_link_library(sb_sized_string f) {
     char cmd[128] = {0};
-    snprintf(cmd, sizeof(cmd), "l%s", f.string);
+    sb_snprintf(cmd, sizeof(cmd), "l%s", f.string);
     sb_add_flag(cmd);
 }
 
@@ -740,7 +782,7 @@ void write_command_entry(char* filep) {
     //output
     sb_fprintf(compile_cmds, "\"-o\", ");
     char output[PATH_MAX] = {0};
-    snprintf(output, sizeof(output), "\"%s/%s\"", build_dir, &curr_exe.text[curr_exe.output]);
+    sb_snprintf(output, sizeof(output), "\"%s/%s\"", build_dir, &curr_exe.text[curr_exe.output]);
     sb_fprintf(compile_cmds, "%s", output);
 
     sb_fprintf(compile_cmds, "]\n");
@@ -754,12 +796,12 @@ void sb_stop_exec() {
 
     //printf("Source Files\n");
     //for (int i = 0; i < curr_exe.fsize; i++) {
-    //    printf("\t%s\n", &curr_exe.text[curr_exe.files[i]]);
+    //   sb_printf("\t%s\n", &curr_exe.text[curr_exe.files[i]]);
     //}
 
     //printf("Header Files\n");
     //for (int i = 0; i < curr_exe.hsize; i++) {
-    //    printf("\t%s\n", &curr_exe.text[curr_exe.headers[i]]);
+    //   sb_printf("\t%s\n", &curr_exe.text[curr_exe.headers[i]]);
     //}
 
     //printf("Output\n");
@@ -767,7 +809,7 @@ void sb_stop_exec() {
 
     //printf("Flags\n");
     //for (int i = 0; i < curr_exe.osize; i++) {
-    //    printf("\t%s\n", &curr_exe.text[curr_exe.options[i]]);
+    //   sb_printf("\t%s\n", &curr_exe.text[curr_exe.options[i]]);
     //}
 
 
@@ -787,16 +829,16 @@ void sb_stop_exec() {
             //output
             sb_cmd_opt("o");
             char output[PATH_MAX] = {0};
-            snprintf(output, sizeof(output), "%s%s", build_dir, &curr_exe.text[curr_exe.output]);
+            sb_snprintf(output, sizeof(output), "%s%s", build_dir, &curr_exe.text[curr_exe.output]);
             sb_cmd_arg(output);
         }
     } else {
         for (uint32_t subfile = 0; subfile < curr_exe.fsize; subfile++) {
             char binname[PATH_MAX] = {0};
-            snprintf(binname, sizeof(binname), "%s%s.o", build_dir, sb_basename(&curr_exe.text[curr_exe.files[subfile]]));
+            sb_snprintf(binname, sizeof(binname), "%s%s.o", build_dir, sb_basename(&curr_exe.text[curr_exe.files[subfile]]));
 
             int should_build = sb_cmptime(binname, &curr_exe.text[curr_exe.files[subfile]]);
-            printf("building: %s\n", binname);
+            sb_printf("building: %s\n", binname);
             if (!should_build) continue;
             sb_CMD() {
                 _sb_cmd_main(compiler);
@@ -818,7 +860,7 @@ void sb_stop_exec() {
         int should_build = 0;
         for (uint32_t i = 0; i < curr_exe.fsize; i++) {
             char binname[PATH_MAX] = {0};
-            snprintf(binname, sizeof(binname), "%s%s.o", build_dir, sb_basename(&curr_exe.text[curr_exe.files[i]]));
+            sb_snprintf(binname, sizeof(binname), "%s%s.o", build_dir, sb_basename(&curr_exe.text[curr_exe.files[i]]));
             should_build |= sb_cmptime(binname, &curr_exe.text[curr_exe.files[i]]);
         }
 
@@ -833,14 +875,14 @@ void sb_stop_exec() {
                 //sources files
                 for (uint32_t i = 0; i < curr_exe.fsize; i++) {
                     char binname[PATH_MAX] = {0};
-                    snprintf(binname, sizeof(binname), "%s%s.o", build_dir, sb_basename(&curr_exe.text[curr_exe.files[i]]));
+                    sb_snprintf(binname, sizeof(binname), "%s%s.o", build_dir, sb_basename(&curr_exe.text[curr_exe.files[i]]));
                     sb_cmd_arg(binname);
                 }
 
                 //output
                 sb_cmd_opt("o");
                 char output[PATH_MAX] = {0};
-                snprintf(output, sizeof(output), "%s%s", build_dir, &curr_exe.text[curr_exe.output]);
+                sb_snprintf(output, sizeof(output), "%s%s", build_dir, &curr_exe.text[curr_exe.output]);
                 sb_cmd_arg(output);
             }
         }

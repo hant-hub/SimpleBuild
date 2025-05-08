@@ -2,12 +2,12 @@
 {
 	"directory": "/home/ehantman/Desktop/repos/simplebuild",
 	"file": "tests/test.c",
-	"arguments": ["cc", "-DSB_IMPL", "tests/test.c", "-o", "/./build/test"]
+	"arguments": ["cc", "-DSB_IMPL", "tests/test.c", "-o", "/./sb_build"]
 },
 {
 	"directory": "/home/ehantman/Desktop/repos/simplebuild",
 	"file": "sb.h",
-	"arguments": ["cc", "-DSB_IMPL", "tests/test.c", "-o", "/./build/test"]
+	"arguments": ["cc", "-DSB_IMPL", "tests/test.c", "-o", "/./sb_build"]
 },
 {
 	"directory": "/home/ehantman/Desktop/repos/simplebuild",
@@ -21,7 +21,7 @@
 },
 {
 	"directory": "/home/ehantman/Desktop/repos/simplebuild",
-	"file": "testsrc2.c",
+	"file": "s/testsrc2.c",
 	"arguments": ["cc", "-g", "tests/testsrc.c", "tests/testsrc2.c", "-o", "build//app"]
 }
 ]

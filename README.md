@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
     - [ ] Find File
     - [ ] Delete File
 - [ ] Full documentation with multiple examples
-- [ ] Toggleable incremental builds
+- [x] Toggleable incremental builds
 - [ ] Conditional builds
 - [ ] Multiple dependencies
 - [ ] Windows Compatability
