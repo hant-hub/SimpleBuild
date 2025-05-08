@@ -559,7 +559,6 @@ uint32_t _sb_cmd_arg(sb_sized_string arg) {
 }
 
 void sb_autobuild(int argc, char* argv[], char* src) {
-    return;
     //test if should rebuild
     //rebuild based on compiler
     int rebuild = 0; 
@@ -572,7 +571,7 @@ void sb_autobuild(int argc, char* argv[], char* src) {
         sb_export_command();
         if (!should_rebuild) {
             printf("No Rebuild\n");
-            sb_cmd_opt("DSB_IMPL");
+            sb_add_flag("DSB_IMPL");
             sb_dry_run();
             sb_export_command();
         } else {
@@ -719,27 +718,57 @@ void sb_dry_run() {
     curr_exe.dry = 1;
 }
 
+void write_command_entry(char* filep) {
+    sb_fprintf(compile_cmds, "{\n");
+
+    sb_fprintf(compile_cmds, "\t\"directory\": \"%s\",\n", sb_get_cwd());
+    sb_fprintf(compile_cmds, "\t\"file\": \"%s\",\n", filep);
+    sb_fprintf(compile_cmds, "\t\"arguments\": [");
+
+    sb_fprintf(compile_cmds, "\"%.*s\", ", compiler.size, compiler.string);
+
+    //flags            
+    for (uint32_t i = 0; i < curr_exe.osize; i++) {
+        sb_fprintf(compile_cmds, "\"-%s\", ", &curr_exe.text[curr_exe.options[i]]);
+    }
+
+    //sources files
+    for (uint32_t i = 0; i < curr_exe.fsize; i++) {
+        sb_fprintf(compile_cmds, "\"%s\", ", &curr_exe.text[curr_exe.files[i]]);
+    }
+
+    //output
+    sb_fprintf(compile_cmds, "\"-o\", ");
+    char output[PATH_MAX] = {0};
+    snprintf(output, sizeof(output), "\"%s/%s\"", build_dir, &curr_exe.text[curr_exe.output]);
+    sb_fprintf(compile_cmds, "%s", output);
+
+    sb_fprintf(compile_cmds, "]\n");
+    sb_fprintf(compile_cmds, "}");
+
+}
+
 //TODO(ELI): Set up to add a compile_commands
 //entry for each file in the executable.
 void sb_stop_exec() {
 
-    printf("Source Files\n");
-    for (int i = 0; i < curr_exe.fsize; i++) {
-        printf("\t%s\n", &curr_exe.text[curr_exe.files[i]]);
-    }
+    //printf("Source Files\n");
+    //for (int i = 0; i < curr_exe.fsize; i++) {
+    //    printf("\t%s\n", &curr_exe.text[curr_exe.files[i]]);
+    //}
 
-    printf("Header Files\n");
-    for (int i = 0; i < curr_exe.hsize; i++) {
-        printf("\t%s\n", &curr_exe.text[curr_exe.headers[i]]);
-    }
+    //printf("Header Files\n");
+    //for (int i = 0; i < curr_exe.hsize; i++) {
+    //    printf("\t%s\n", &curr_exe.text[curr_exe.headers[i]]);
+    //}
 
-    printf("Output\n");
-    printf("\t%s\n", &curr_exe.text[curr_exe.output]);
+    //printf("Output\n");
+    //printf("\t%s\n", &curr_exe.text[curr_exe.output]);
 
-    printf("Flags\n");
-    for (int i = 0; i < curr_exe.osize; i++) {
-        printf("\t%s\n", &curr_exe.text[curr_exe.options[i]]);
-    }
+    //printf("Flags\n");
+    //for (int i = 0; i < curr_exe.osize; i++) {
+    //    printf("\t%s\n", &curr_exe.text[curr_exe.options[i]]);
+    //}
 
 
     if (!curr_exe.incremental) {
@@ -757,53 +786,86 @@ void sb_stop_exec() {
 
             //output
             sb_cmd_opt("o");
-            sb_cmd_arg(&curr_exe.text[curr_exe.output]);
+            char output[PATH_MAX] = {0};
+            snprintf(output, sizeof(output), "%s%s", build_dir, &curr_exe.text[curr_exe.output]);
+            sb_cmd_arg(output);
         }
     } else {
-        printf("Not Implemented!\n");
+        for (uint32_t subfile = 0; subfile < curr_exe.fsize; subfile++) {
+            char binname[PATH_MAX] = {0};
+            snprintf(binname, sizeof(binname), "%s%s.o", build_dir, sb_basename(&curr_exe.text[curr_exe.files[subfile]]));
+
+            int should_build = sb_cmptime(binname, &curr_exe.text[curr_exe.files[subfile]]);
+            printf("building: %s\n", binname);
+            if (!should_build) continue;
+            sb_CMD() {
+                _sb_cmd_main(compiler);
+                //flags            
+                for (uint32_t i = 0; i < curr_exe.osize; i++) {
+                    sb_cmd_opt(&curr_exe.text[curr_exe.options[i]]);
+                }
+
+                //source file
+                sb_cmd_opt("c");
+                sb_cmd_arg(&curr_exe.text[curr_exe.files[subfile]]);
+
+                //output
+                sb_cmd_opt("o");
+                sb_cmd_arg(binname);
+            }
+        }
+        sb_fence();
+        int should_build = 0;
+        for (uint32_t i = 0; i < curr_exe.fsize; i++) {
+            char binname[PATH_MAX] = {0};
+            snprintf(binname, sizeof(binname), "%s%s.o", build_dir, sb_basename(&curr_exe.text[curr_exe.files[i]]));
+            should_build |= sb_cmptime(binname, &curr_exe.text[curr_exe.files[i]]);
+        }
+
+        if (should_build) {
+            sb_CMD() {
+                _sb_cmd_main(compiler);
+                //flags            
+                for (uint32_t i = 0; i < curr_exe.osize; i++) {
+                    sb_cmd_opt(&curr_exe.text[curr_exe.options[i]]);
+                }
+
+                //sources files
+                for (uint32_t i = 0; i < curr_exe.fsize; i++) {
+                    char binname[PATH_MAX] = {0};
+                    snprintf(binname, sizeof(binname), "%s%s.o", build_dir, sb_basename(&curr_exe.text[curr_exe.files[i]]));
+                    sb_cmd_arg(binname);
+                }
+
+                //output
+                sb_cmd_opt("o");
+                char output[PATH_MAX] = {0};
+                snprintf(output, sizeof(output), "%s%s", build_dir, &curr_exe.text[curr_exe.output]);
+                sb_cmd_arg(output);
+            }
+        }
     }
 
 
     if (curr_exe.export_commands) {
         //write out compile_commands file
         if (!compile_cmds) {
-            compile_cmds = sb_open("test.json", sbf_WRITE, sbf_CREATE | sbf_TRUNC);
+            compile_cmds = sb_open("compile_commands.json", sbf_WRITE, sbf_CREATE | sbf_TRUNC);
             sb_fprintf(compile_cmds, "[\n");
         } else {
             sb_fprintf(compile_cmds, ",\n");
         }
-        return;
 
-        char* filep = curr_exe.text;
-        while (filep - curr_exe.text < curr_exe.tsize) {
-            sb_fprintf(compile_cmds, "{\n");
+        //source entries
+        for (uint32_t i = 0; i < curr_exe.fsize; i++) {
+            write_command_entry(&curr_exe.text[curr_exe.files[i]]);
+            sb_fprintf(compile_cmds, ",\n");
+        }
 
-            sb_fprintf(compile_cmds, "\t\"directory\": \"%s\",\n", sb_get_cwd());
-            sb_fprintf(compile_cmds, "\t\"file\": \"%s\",\n", filep);
-            sb_fprintf(compile_cmds, "\t\"arguments\": [");
-
-            //advance filep
-            //printf("hit: %s\n", filep);
-            while (filep[0]) filep++;
-            filep++;
-
-            sb_cmd idx = curr_cmd;
-            char* cur = &cmd_list.cmd[idx.start];
-
-            for (uint32_t j = 0; j < idx.length; j++) {
-                sb_fprintf(compile_cmds, "\"%s\"", cur);
-                //consume
-                while (cur[0] != separator) cur++;
-                cur++;
-
-                if (j + 1 < idx.length) {
-                    sb_fprintf(compile_cmds, ",");
-                }
-            }
-            sb_fprintf(compile_cmds, "],\n");
-            sb_fprintf(compile_cmds, "}");
-
-            if (filep - curr_exe.text + 1 < curr_exe.tsize) {
+        //header entries
+        for (uint32_t i = 0; i < curr_exe.hsize; i++) {
+            write_command_entry(&curr_exe.text[curr_exe.headers[i]]);
+            if (i + 1 < curr_exe.hsize) {
                 sb_fprintf(compile_cmds, ",\n");
             }
         }
