@@ -43,16 +43,18 @@ int main(int argc, char* argv[]) {
 - Compiler/Platform Detection
 
 # Future Features:
-- [ ] Platform independent Utilities
-    - [ ] Mkdir
-    - [ ] Chdir
-    - [ ] Find File
-    - [ ] Delete File
+- [X] Platform independent Utilities
+    - [X] Mkdir
+    - [X] Chdir
+    - [X] Delete File
+    - [X] Delete Directory
 - [ ] Full documentation with multiple examples
 - [x] Toggleable incremental builds
 - [ ] Support for Compiler Include Dependencies
 - [ ] Recursive File Search
-- [ ] Conditional builds
+- [X] Conditional builds
+    - [X] OS variable
+    - [X] arg checks
 - [ ] Windows Compatability
     - [ ] MSVC
     - [ ] GCC MinGW

@@ -5,6 +5,8 @@
 
 int main(int argc, char* argv[]) {
     sb_BUILD(argc, argv) {
+        sb_printf("%d\n", sb_check_arg("test"));
+        sb_chdir_exe();
         sb_target_dir("build/");
         sb_mkdir("build");
         sb_EXEC() {

@@ -24,6 +24,12 @@ typedef void* FHANDLE;
 typedef int sb_file;
 #endif
 
+typedef enum sb_platform_type {
+    sb_WIN32,
+    sb_UNIX,
+    sb_OSX,
+} sb_platform_type;
+
 typedef enum sb_file_mode {
     sbf_READ,
     sbf_WRITE,
@@ -40,7 +46,11 @@ typedef enum sb_file_flags {
 sb_file sb_open(char* file, sb_file_mode mode, sb_file_flags flags);
 void sb_close(sb_file f);
 
+void sb_delete_file(char* name);
+void sb_delete_dir(char* name);
 void sb_mkdir(char* name);
+void sb_chdir(char* name);
+void sb_chdir_exe();
 
 void sb_fprintf(sb_file f, char* format, ...);
 void sb_printf(char* format, ...);
@@ -70,12 +80,16 @@ char* sb_basename(char* f);
 //Sized
 void sb_strcpy(char* dst, const sb_sized_string s);
 
+//Conditional functions
+sb_platform_type sb_platform();
+int sb_check_arg(const char* arg);
+
 
 /*
  * Non specific Build Functions
  */
 
-int sb_build_start();
+int sb_build_start(int argc, char* argv[]);
 void sb_build_end();
 
 int sb_cmd_start();
@@ -127,7 +141,7 @@ void sb_dry_run();
  */
 
 #define sb_BUILD(argc, argv) \
-    for (int i = (sb_build_start(), sb_autobuild(argc, argv, __FILE__), 0); i == 0; (sb_build_end(), i++))
+    for (int i = (sb_build_start(argc, argv), sb_autobuild(argc, argv, __FILE__), 0); i == 0; (sb_build_end(), i++))
 
 #define sb_CMD() \
     for (int i = sb_cmd_start(); i == 0; (sb_cmd_end(), i++))
@@ -233,6 +247,10 @@ typedef struct sb_cmd {
 } sb_cmd;
 
 typedef struct sb_cmd_list {
+    //Cmdline Args
+    uint32_t cmdsize;
+    char** cargs;
+
     //text buffer
     uint32_t size;
     uint32_t cap;
@@ -309,8 +327,29 @@ void sb_close(sb_file f) {
     close(f);
 }
 
+void sb_delete_file(char* name) {
+    unlink(name);
+}
+
+void sb_delete_dir(char* name) {
+    rmdir(name);
+}
+
 void sb_mkdir(char* name) {
     mkdir(name, 0777);
+}
+
+void sb_chdir(char* name) {
+    chdir(name);
+}
+
+void sb_chdir_exe() {
+    char tmp[PATH_MAX] = {0};
+    if (readlink("/proc/self/exe", tmp, PATH_MAX) < 0) {
+        sb_printf("Error: Failed to find Build Binary\n");
+        sb_exit(-1);
+    }
+    sb_chdir(tmp);
 }
 
 void sb_strcpy(char* dst, const sb_sized_string s) {
@@ -438,13 +477,39 @@ sb_sized_string compiler = (sb_sized_string) {
 };
 #endif
 
+
+#if defined(_WIN32)
+const sb_platform_type os = sb_WIN32;  
+#elif defined (unix)
+const sb_platform_type os = sb_UNIX;  
+#elif defined (__APPLE__)
+const sb_platform_type os = sb_OSX;  
+#endif
+
+sb_platform_type sb_platform() {
+    return os;
+}
+
+int sb_check_arg(const char* arg) {
+    for (uint32_t i = 0; i < cmd_list.cmdsize; i++) {
+        if (sb_strcmp(arg, cmd_list.cargs[i]) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 //-----------------------------------------------------
 
-int sb_build_start() {
+int sb_build_start(int argc, char* argv[]) {
     //reset top pointers,
     //don't mess with pointers
     cmd_list.size = 0;
     cmd_list.isize = 0;
+
+    cmd_list.cmdsize = argc;
+    cmd_list.cargs = argv;
+
     curr_exe = (exe_info){0};
 
 
