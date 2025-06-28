@@ -14,6 +14,7 @@ int main(int argc, char* argv[]) {
             sb_set_out("testapp");
             sb_set_optmize(0);
             sb_export_command();
+            sb_set_incremental();
         }
     }
     return 0;

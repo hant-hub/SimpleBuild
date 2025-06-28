@@ -21,6 +21,7 @@ int main(int argc, char* argv[]) {
 
             sb_set_incremental();
             sb_export_command();
+            sb_set_find_deps();
         }
         sb_fence();
         sb_CMD() {

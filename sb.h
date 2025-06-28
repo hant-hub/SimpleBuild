@@ -1,7 +1,7 @@
 #ifndef SB_BUILD_H
 #define SB_BUILD_H
 
-#include <linux/limits.h>
+#include <signal.h>
 #include <stdint.h>
 
 /*
@@ -19,9 +19,11 @@
  */
 
 #ifdef _MSC_VER
-typedef void* FHANDLE;
+typedef void* sb_file;
+static sb_file error = NULL;
 #else
 typedef int sb_file;
+static sb_file error = -1;
 #endif
 
 typedef enum sb_platform_type {
@@ -55,6 +57,9 @@ void sb_chdir_exe();
 void sb_fprintf(sb_file f, char* format, ...);
 void sb_printf(char* format, ...);
 void sb_snprintf(void* dst, uint32_t max, char* format, ...);
+
+void* sb_mapfile(sb_file f, uint32_t* size);
+void sb_readfile(void* dst, sb_file f, uint32_t num_bytes);
 
 void sb_exit(int status);
 
@@ -126,6 +131,11 @@ void _sb_link_library(sb_sized_string f);
 void sb_set_optmize(uint32_t level);
 void sb_export_command();
 void sb_set_incremental();
+
+//This is optional, you can manually ad dependencies via
+//add header, but this will utilize the compiler emitted
+//header dependencies.
+void sb_set_find_deps();
 
 /* 
  * will run through build logic but won't submit to 
@@ -237,6 +247,12 @@ void sb_dry_run();
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include <assert.h>
+#include <linux/limits.h>
+#include <sys/types.h>
+
+#include <sys/mman.h>
+
 #endif
 
 #include <stdarg.h>
@@ -339,6 +355,31 @@ void sb_mkdir(char* name) {
     mkdir(name, 0777);
 }
 
+void* sb_mapfile(sb_file f, uint32_t* size) {
+    struct stat buf;
+    if (fstat(f, &buf)) {
+        sb_printf("Failed to map file!\n");
+        sb_exit(-1);
+    }
+    *size = buf.st_size;
+
+    return mmap(NULL, buf.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, f, 0);
+}
+
+void sb_unmapfile(sb_file f, void* map) {
+    struct stat buf;
+    if (fstat(f, &buf)) {
+        sb_printf("Failed to map file!\n");
+        sb_exit(-1);
+    }
+
+    munmap(map, buf.st_size);
+}
+
+void sb_readfile(void* dst, sb_file f, uint32_t num_bytes) {
+    assert(0);
+}
+
 void sb_chdir(char* name) {
     chdir(name);
 }
@@ -413,6 +454,7 @@ typedef struct exe_info {
     int export_commands;
     int dry;
     int incremental;
+    int auto_deps;
 
     //unique options
     uint32_t output;
@@ -781,6 +823,12 @@ void sb_set_incremental() {
     curr_exe.incremental = 1;
 }
 
+void sb_set_find_deps() {
+    curr_exe.auto_deps = 1; 
+    sb_add_flag("MP");
+    sb_add_flag("MMD");
+}
+
 void sb_set_optmize(uint32_t level) {
     switch(level) {
         case 1:
@@ -856,8 +904,48 @@ void write_command_entry(char* filep) {
 
 }
 
-//TODO(ELI): Set up to add a compile_commands
-//entry for each file in the executable.
+static int sb_autodeps(char* binname, char* srcname) {
+    if (!curr_exe.auto_deps) return 0;
+    
+    char output[PATH_MAX] = {0};
+    sb_snprintf(output, PATH_MAX, "%s.d", srcname);
+    sb_printf("Dep File: %s\n", output);
+
+    sb_file f = sb_open(output, sbf_READ, 0);
+    if (f == error) {
+        return 1; //assume require rebuild
+                  //less frustrating to erroneously
+                  //rebuild a file rather than fail to rebuild
+    }
+
+    int build = 0;
+    uint32_t size;
+    char* data = sb_mapfile(f, &size);
+
+    char* cursor = data;
+    while (cursor[0] != ':') cursor++;
+    cursor++;
+    while(cursor[0] == ' ') {
+        while(cursor[0] != '\n') cursor++;
+        cursor++;
+    }
+
+    while (cursor - data < size) {
+        char* start = cursor;
+        while (cursor - data < size && cursor[0] != '\n') {
+            cursor++;
+        }
+        char src[PATH_MAX] = {0};
+        snprintf(src, PATH_MAX, "%.*s", (int)((cursor - 1) - start), start);
+        build |= sb_cmptime(binname, src);
+        cursor++;
+    }
+
+    sb_unmapfile(f, data);
+    return build;
+}
+
+
 void sb_stop_exec() {
 
     if (!curr_exe.incremental) {
@@ -885,6 +973,11 @@ void sb_stop_exec() {
             sb_snprintf(binname, sizeof(binname), "%s%s.o", build_dir, sb_basename(&curr_exe.text[curr_exe.files[subfile]]));
 
             int should_build = sb_cmptime(binname, &curr_exe.text[curr_exe.files[subfile]]);
+
+            char srcname[PATH_MAX] = {0};
+            sb_snprintf(srcname, PATH_MAX, "%s%s", build_dir, sb_basename(&curr_exe.text[curr_exe.files[subfile]]));
+            should_build |= sb_autodeps(binname, srcname); 
+
             if (!should_build) continue;
             sb_printf("building: %s\n", binname);
             sb_CMD() {
@@ -916,6 +1009,12 @@ void sb_stop_exec() {
             sb_snprintf(binname, sizeof(binname), "%s%s", build_dir, &curr_exe.text[curr_exe.output]);
             should_build |= sb_cmptime(binname, &curr_exe.text[curr_exe.headers[i]]);
         }
+
+        char binname[PATH_MAX] = {0};
+        char srcname[PATH_MAX] = {0};
+        sb_snprintf(binname, PATH_MAX, "%s%s", build_dir, &curr_exe.text[curr_exe.output]);
+        sb_snprintf(srcname, PATH_MAX, "%s%s", build_dir, &curr_exe.text[curr_exe.output]);
+        should_build |= sb_autodeps(binname, srcname); 
 
         if (should_build) {
             sb_CMD() {

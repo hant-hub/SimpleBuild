@@ -1,6 +1,6 @@
 #include <stdio.h>
+#include "test.h"
 
-void bam();
 
 int main() {
     printf("kablamo\n");
