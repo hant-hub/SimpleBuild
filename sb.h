@@ -851,8 +851,9 @@ void sb_set_optmize(uint32_t level) {
 //path in parentheses to ensure it works with
 //spaces
 void _sb_add_include_path(sb_sized_string f) {
-    sb_cmd_opt("-I");
-    _sb_cmd_arg(f);
+    char cmd[128] = {0};
+    sb_snprintf(cmd, sizeof(cmd), "I%s", f.string);
+    sb_add_flag(cmd);
 }
 
 void _sb_add_library_path(sb_sized_string f) {
