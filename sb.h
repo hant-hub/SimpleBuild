@@ -331,10 +331,14 @@ char* sb_get_cwd() {
 char* sb_dir_iter(const char* directory) {
     static DIR* d = NULL;
     static struct dirent* dent;
+    static char outbuf[PATH_MAX + 1] = {0};
+    static char* file = 0;
     
     if (directory) {
         if (d) closedir(d);
         d = opendir(directory);
+        memset(outbuf, 0, sizeof(outbuf));
+        file = stpcpy(outbuf, directory);
     }
 
     do {
@@ -342,7 +346,8 @@ char* sb_dir_iter(const char* directory) {
     }while (dent && dent->d_type == DT_DIR); 
 
     if (!dent) return NULL;
-    return dent->d_name;
+    strcpy(file, dent->d_name);
+    return outbuf;
 }
 
 void sb_exit(int status) {
