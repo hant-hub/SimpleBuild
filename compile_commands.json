@@ -1,21 +1,21 @@
 [
 {
-	"directory": "/home/eli/repos/SimpleBuild",
+	"directory": "/home/Elijah/repos/SimpleBuild",
 	"file": "sb.c",
 	"arguments": ["cc", "-DSB_IMPL", "sb.c", "-o", "/./sb"]
 },
 {
-	"directory": "/home/eli/repos/SimpleBuild",
+	"directory": "/home/Elijah/repos/SimpleBuild",
 	"file": "sb.h",
 	"arguments": ["cc", "-DSB_IMPL", "sb.c", "-o", "/./sb"]
 },
 {
-	"directory": "/home/eli/repos/SimpleBuild",
+	"directory": "/home/Elijah/repos/SimpleBuild",
 	"file": "tests/thing/testsrc2.c",
 	"arguments": ["cc", "-g", "-MP", "-MMD", "tests/thing/testsrc2.c", "tests/testsrc.c", "-o", "build//app"]
 },
 {
-	"directory": "/home/eli/repos/SimpleBuild",
+	"directory": "/home/Elijah/repos/SimpleBuild",
 	"file": "tests/testsrc.c",
 	"arguments": ["cc", "-g", "-MP", "-MMD", "tests/thing/testsrc2.c", "tests/testsrc.c", "-o", "build//app"]
 },

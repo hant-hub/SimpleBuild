@@ -21,6 +21,9 @@ int main(int argc, char* argv[]) {
 
 
         }
+        sb_FOREACHFILE("tests/", name) {
+            sb_printf("file: %s\n", name);
+        }
         sb_fence();
         sb_CMD() {
             sb_cmd_main("./build/app");
