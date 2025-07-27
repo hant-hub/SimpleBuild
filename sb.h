@@ -84,6 +84,7 @@ typedef struct sb_sized_string {
 uint32_t sb_strlen(const char* s);
 uint32_t sb_strcmp(const char* s1, const char* s2);
 char* sb_basename(char* f);
+char* sb_stripext(char* f);
 
 //Sized
 void sb_strcpy(char* dst, const sb_sized_string s);
@@ -448,6 +449,13 @@ char* sb_basename(char* f) {
     while (stripped >= f && stripped[0] != '/') stripped--;
     stripped++;
     return stripped;
+}
+
+char* sb_stripext(char* f) {
+    char* cursor = f;
+    while (cursor[0] != '.') cursor++;
+    cursor[0] = 0;
+    return f;
 }
 
 void* sb_alloc(uint64_t size) {

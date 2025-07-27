@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
 
         }
         sb_FOREACHFILE("tests/", name) {
-            sb_printf("file: %s\n", name);
+            sb_printf("file: %s\n", sb_stripext(name));
         }
         sb_fence();
         sb_CMD() {
