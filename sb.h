@@ -119,6 +119,7 @@ int sb_start_exec();
 void sb_stop_exec();
 
 void _sb_add_file(sb_sized_string f);
+void _sb_add_source_dir(sb_sized_string f);
 void _sb_add_header(sb_sized_string f);
 void _sb_set_out(sb_sized_string f);
 void _sb_target_dir(sb_sized_string f);
@@ -183,6 +184,13 @@ void sb_dry_run();
             .size = sb_strlen(x),\
             })
 
+#define sb_add_source_dir(x) \
+    _sb_add_source_dir((sb_sized_string){ \
+            .string = x,\
+            .size = sb_strlen(x),\
+            })
+
+
 #define sb_add_header(x) \
     _sb_add_header((sb_sized_string){ \
             .string = x,\
@@ -246,6 +254,7 @@ void sb_dry_run();
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <dirent.h>
 
 #include <assert.h>
 #include <linux/limits.h>
@@ -314,7 +323,7 @@ char* sb_get_cwd() {
 
 
 void sb_exit(int status) {
-   sb_exit(status);
+   exit(status);
 }
 
 
@@ -407,9 +416,10 @@ uint32_t sb_strcmp(const char* s1, const char* s2) {
 
 char* sb_basename(char* f) {
     char* stripped = f;
-    while (stripped[0] && stripped[0] != '/') stripped++;
-    if (!stripped[0]) return f;
-    return stripped + 1;
+    while (stripped[0]) stripped++;
+    while (stripped >= f && stripped[0] != '/') stripped--;
+    stripped++;
+    return stripped;
 }
 
 void* sb_alloc(uint64_t size) {
@@ -440,6 +450,19 @@ int sb_cmptime(const char* binary, const char* source) {
     }
 
     return file1.st_mtim.tv_sec < file2.st_mtim.tv_sec;
+}
+
+static uint32_t sb_cmpext(const char* file, const char* ext) {
+    const char* end = file;
+    while (end[0]) end++;
+    end--;
+
+    while (end > file && end[0] != '.') end--;
+    if (end <= file) return -1; //no extension
+    end++;
+
+    return sb_strcmp(end, ext);
+
 }
 
 /* ----------------------------------------------------
@@ -783,6 +806,33 @@ void _sb_add_file(sb_sized_string f) {
     curr_exe.tsize++;
 }
 
+void _sb_add_source_dir(sb_sized_string f) {
+    
+    DIR* d;
+    struct dirent *dir;
+    d = opendir(f.string);
+
+    if (d) {
+        while ((dir = readdir(d)) != NULL) {
+            if (sb_cmpext(dir->d_name, "c") == 0) {
+                char p[PATH_MAX] = {0};
+                snprintf(p, PATH_MAX, "%s/%s", f.string, dir->d_name);
+                printf("\t%s\n", p);
+                sb_add_file(p);
+            }
+            if (dir->d_type != DT_DIR) continue;
+            if (sb_strcmp(dir->d_name, ".") == 0) continue;
+            if (sb_strcmp(dir->d_name, "..") == 0) continue;
+            char p[PATH_MAX] = {0};
+            snprintf(p, PATH_MAX, "%s/%s", f.string, dir->d_name);
+            sb_add_source_dir(p);
+        }
+        closedir(d);
+    } else {
+        perror("failed to open file:");
+    }
+}
+
 void _sb_target_dir(sb_sized_string f) {
     sb_snprintf(build_dir, sizeof(build_dir), "%s", f.string);
 }
@@ -846,6 +896,8 @@ void sb_set_optmize(uint32_t level) {
         default: break;
     }
 }
+
+
 
 //TODO(ELI): Look into automatically enclosing
 //path in parentheses to ensure it works with

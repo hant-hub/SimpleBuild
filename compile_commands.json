@@ -1,27 +1,23 @@
 [
 {
 	"directory": "/home/eli/repos/SimpleBuild",
-	"file": "tests/test.c",
-	"arguments": ["cc", "-DSB_IMPL", "tests/test.c", "-o", "/./sb"]
+	"file": "sb.c",
+	"arguments": ["cc", "-DSB_IMPL", "sb.c", "-o", "/./sb"]
 },
 {
 	"directory": "/home/eli/repos/SimpleBuild",
 	"file": "sb.h",
-	"arguments": ["cc", "-DSB_IMPL", "tests/test.c", "-o", "/./sb"]
+	"arguments": ["cc", "-DSB_IMPL", "sb.c", "-o", "/./sb"]
+},
+{
+	"directory": "/home/eli/repos/SimpleBuild",
+	"file": "tests/thing/testsrc2.c",
+	"arguments": ["cc", "-g", "-MP", "-MMD", "tests/thing/testsrc2.c", "tests/testsrc.c", "-o", "build//app"]
 },
 {
 	"directory": "/home/eli/repos/SimpleBuild",
 	"file": "tests/testsrc.c",
-	"arguments": ["cc", "-g", "-MP", "-MMD", "tests/testsrc.c", "tests/testsrc2.c", "-o", "build//app"]
+	"arguments": ["cc", "-g", "-MP", "-MMD", "tests/thing/testsrc2.c", "tests/testsrc.c", "-o", "build//app"]
 },
-{
-	"directory": "/home/eli/repos/SimpleBuild",
-	"file": "tests/testsrc2.c",
-	"arguments": ["cc", "-g", "-MP", "-MMD", "tests/testsrc.c", "tests/testsrc2.c", "-o", "build//app"]
-},
-{
-	"directory": "/home/eli/repos/SimpleBuild",
-	"file": "sb.h",
-	"arguments": ["cc", "-g", "-MP", "-MMD", "tests/testsrc.c", "tests/testsrc2.c", "-o", "build//app"]
-}
+
 ]
