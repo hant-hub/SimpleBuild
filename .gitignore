@@ -6,3 +6,4 @@ build/*
 .cache
 build
 sb
+compile_commands.json

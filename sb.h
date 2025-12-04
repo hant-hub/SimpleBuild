@@ -731,7 +731,7 @@ void sb_autobuild(int argc, char *argv[], char *src) {
 
     if (rebuild) {
         sb_build_end();
-        execlp(argv[0], argv[0], NULL);
+        execvp(argv[0], argv);
     }
 }
 

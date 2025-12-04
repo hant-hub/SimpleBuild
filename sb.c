@@ -5,10 +5,11 @@
 
 int main(int argc, char* argv[]) {
     sb_BUILD(argc, argv) {
-        sb_printf("%d\n", sb_check_arg("test"));
+        sb_printf("check test: %d\n", sb_check_arg("test"));
         sb_chdir_exe();
         sb_target_dir("build/");
         sb_mkdir("build");
+        sb_fence();
         sb_EXEC() {
             sb_set_out("app");
 
@@ -18,9 +19,8 @@ int main(int argc, char* argv[]) {
             sb_set_incremental();
             sb_export_command();
             sb_set_find_deps();
-
-
         }
+        sb_fence();
         sb_FOREACHFILE("tests/", name) {
             sb_printf("file: %s\n", sb_stripext(name));
         }
