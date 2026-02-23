@@ -1,0 +1,6 @@
+CompileFlags:
+  Add: [-DSB_IMPL]
+
+#This is for the header only stuff
+Diagnostics:
+  Suppress: misc-definitions-in-headers

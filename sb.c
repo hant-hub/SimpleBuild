@@ -1,33 +1,26 @@
-#include <stdio.h>
 #define SB_IMPL
 #include "sb.h"
+#include <stdio.h>
 
 
 int main(int argc, char* argv[]) {
-    sb_BUILD(argc, argv) {
-        sb_printf("check test: %d\n", sb_check_arg("test"));
-        sb_chdir_exe();
-        sb_target_dir("build/");
-        sb_mkdir("build");
-        sb_fence();
-        sb_EXEC() {
-            sb_set_out("app");
 
-            sb_add_source_dir("tests");
-            sb_add_flag("g");
+    StringBuilder b = {}; 
+    SBPushChar(&b, 'a');
+    SBPushChar(&b, 'b');
+    SBPushChar(&b, 'c');
 
-            sb_set_incremental();
-            sb_export_command();
-            sb_set_find_deps();
-        }
-        sb_fence();
-        sb_FOREACHFILE("tests/", name) {
-            sb_printf("file: %s\n", sb_stripext(name));
-        }
-        sb_fence();
-        sb_CMD() {
-            sb_cmd_main("./build/app");
-        }
-    }
-    //printf("%s\n", sb_basename("test"));
-}
+    SBPushStr(&b, " This is a test string");
+
+    printf("b: %s\n", b.data);
+    printf("size: %d cap: %d\n", b.size, b.cap);
+
+    SBFreeString(b);
+
+    CmdList cmds = {};
+
+    Cmd new_cmd = {};
+    //new_cmd.prog = AddStr(&cmds, "neofetch");
+    //AddCmd(&cmds, new_cmd);
+
+} 
