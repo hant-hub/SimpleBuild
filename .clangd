@@ -1,5 +1,5 @@
 CompileFlags:
-  Add: [-DSB_IMPL]
+  Add: [-DSB_IMPL, -xc-header]
 
 #This is for the header only stuff
 Diagnostics:
