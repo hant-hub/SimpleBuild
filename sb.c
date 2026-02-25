@@ -5,6 +5,11 @@
 
 int main(int argc, char* argv[]) {
 
+    RebuildSelf(argc, argv);
+    printf("next\n");
+
+    SetCompiler("clang");
+
     StringBuilder b = {}; 
     SBPushChar(&b, 'a');
     SBPushChar(&b, 'b');
@@ -30,7 +35,7 @@ int main(int argc, char* argv[]) {
 
     Cmd print_cmd = {0};
     PushCmdArg(&cmds, &new_cmd, "sleep");
-    PushCmdArg(&cmds, &new_cmd, "1");
+    PushCmdArg(&cmds, &new_cmd, "0.5");
 
     PushCmdArg(&cmds, &print_cmd, "echo");
     PushCmdArg(&cmds, &print_cmd, "1");
@@ -57,4 +62,38 @@ int main(int argc, char* argv[]) {
     dynFree(new_cmd.args);
     FreeCmdList(cmds);
 
+    MakeDirectory("tmp/thing");
+    u64 t1 = GetFileTime("sb");
+    u64 t2 = GetFileTime("sb.c");
+
+    printf("FileTimes: %ld %ld\n", t1, t2);
+    printf("Up To Date: %d\n", t1 > t2);
+
+    SBResetString(&b);
+    ExtractBaseName("a/b/c.c", &b);
+    printf("Basename: %s\n", b.str.data);
+    SBResetString(&b);
+    PopDirLevel("a/b/c.c", &b);
+    printf("Path: %s\n", b.str.data);
+    PopDirLevel(b.str.data, &b);
+    printf("Path: %s\n", b.str.data);
+    SBResetString(&b);
+    GetExtension("a/b/c", &b);
+    printf("Ext: %s\n", b.str.data);
+
+    //iterate over directory
+    DirBegin(".");
+    while (1) {
+        DirType t;
+        char* file = DirNext(&t);
+        if (t == T_END) break;
+
+        printf("File: %s ", file);
+        switch(t) {
+            case T_FILE: printf("file\n"); break;
+            case T_DIR: printf("dir\n"); break;
+            case T_UNKNOWN: printf("unknown\n"); break;
+            case T_END: printf("end\n"); break;
+        }
+    }
 } 

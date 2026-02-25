@@ -145,6 +145,32 @@ void SetName(CmdList *list, Exec *e, char *name);
 void AddSource(CmdList *list, Exec *e, char *filename);
 void AddFlag(CmdList *list, Exec *e, char *flag);
 void PushExec(CmdList *list, Exec e); // frees Exec
+void SetCompiler(char* comp);
+
+
+//File Helpers
+
+void GetExtension(char* filepath, StringBuilder* b);
+void PopDirLevel(char* filepath, StringBuilder* b);
+void ExtractBaseName(char* filepath, StringBuilder* b);
+void MakeDirectory(char* filepath);
+u64 GetFileTime(char* filepath);
+void _RebuildSelf(char* sourcename, u32 argc, char** argv);
+#define RebuildSelf(argc, argv) _RebuildSelf(__FILE__, argc, argv)
+
+//Directory Iterators
+typedef enum DirType {
+    T_FILE,
+    T_DIR,
+    T_END,
+    T_UNKNOWN,
+} DirType;
+
+void DirBegin(char* filepath);
+char* DirNext(DirType* t);
+
+
+
 
 #ifdef SB_IMPL
 #include <stdlib.h>
@@ -160,7 +186,8 @@ void SBPushChar(StringBuilder *b, char c) {
     dynPush(b->str, 0);
 }
 void SBPushStr(StringBuilder *b, char *str) {
-    b->str.size -= 1;
+    if (b->str.size)
+        b->str.size -= 1;
     dynExt(b->str, str, strlen(str));
     dynPush(b->str, 0);
 }
@@ -187,8 +214,8 @@ void PushCmdArg(CmdList *list, Cmd *c, char *str) {
     dynPush(c->args, id);
 }
 
+#include <stdio.h>
 void ExecuteCmd(CmdList *list, Cmd cmd, u32 num_jobs) {
-
     static int num_jobs_outstanding = 0;
 
     // fence
@@ -213,6 +240,12 @@ void ExecuteCmd(CmdList *list, Cmd cmd, u32 num_jobs) {
     }
     dynPush(list->curr_cmd, NULL);
     num_jobs_outstanding++;
+
+    printf("Cmd: ");
+    for (u32 i = 0; i < list->curr_cmd.size; i++) {
+        printf("%s ", list->curr_cmd.data[i]);
+    }
+    printf("\n");
 
     if (fork() != 0)
         return;
@@ -247,12 +280,18 @@ void AddFlag(CmdList *list, Exec *e, char *flag) {
     dynPush(e->flags, i);
 }
 
+static char* compiler = "cc";
+
+void SetCompiler(char* comp) {
+    compiler = comp;
+}
+
 void PushExec(CmdList *list, Exec e) {
     //generate cmd
 
     StringBuilder b = {};
     Cmd comp = {};
-    PushCmdArg(list, &comp, "cc");
+    PushCmdArg(list, &comp, compiler);
 
     //push sources
     for (u32 i = 0; i < e.sources.size; i++) {
@@ -269,8 +308,137 @@ void PushExec(CmdList *list, Exec e) {
 
     //output
     PushCmdArg(list, &comp, "-o");
-    PushCmdArg(list, &comp, &list->strs.data[e.exe_name]);
+    dynPush(comp.args, e.exe_name);
     AddCmd(list, comp);
+}
+
+#include <sys/stat.h>
+//File Helpers
+
+void GetExtension(char* filepath, StringBuilder* b) {
+    u32 len = strlen(filepath);
+    u32 start = len;
+
+    while (start && filepath[start] != '.') start--;
+
+    SBResetString(b);
+    if (!start) {
+        dynPush(b->str, 0);
+        return;
+    }
+    SBPushStr(b, &filepath[start]);
+}
+
+void PopDirLevel(char* filepath, StringBuilder* b) {
+    u32 len = strlen(filepath);
+
+    while (len && filepath[len] != '/') len--;
+
+    SBResetString(b);
+    if (!len) {
+        dynPush(b->str, 0);
+        return;
+    }
+    for (u32 i = 0; i < len; i++) {
+        SBPushChar(b, filepath[i]);
+    }
+}
+
+void ExtractBaseName(char* filepath, StringBuilder* b) {
+    u32 len = strlen(filepath);
+
+    while (len && filepath[len - 1] != '/') {
+        len--;
+    }
+
+    SBResetString(b);
+    if (!len) {
+        dynPush(b->str, 0);
+        return;
+    }
+    SBPushStr(b, &filepath[len]);
+}
+
+void MakeDirectory(char* filepath) {
+    StringBuilder b = {0};
+    SBPushStr(&b, filepath);
+
+    while (b.str.size) {
+        if (dynBack(b.str) == '/') {
+            dynBack(b.str) = 0;
+            MakeDirectory(b.str.data);
+        }
+        dynBack(b.str) = 0;
+        b.str.size--;
+    }
+    mkdir(filepath, 0777);
+    SBFreeString(b);
+}
+
+#include <sys/stat.h>
+u64 GetFileTime(char* filepath) {
+
+    struct stat buf;
+    if (stat(filepath, &buf)) {
+        return -1;
+    }
+    u64 time = buf.st_mtim.tv_sec * (1000 * 1000 * 1000);
+    time += buf.st_mtim.tv_nsec;
+    
+    return time;
+}
+
+void _RebuildSelf(char* sourcename, u32 argc, char** argv) {
+    
+    u64 t1 = GetFileTime("/proc/self/exe");
+    u64 t2 = GetFileTime(sourcename);
+
+
+    //binary matches
+    if (t1 > t2) return;
+
+    CmdList cmds = {};
+
+    StringBuilder b = {};
+    SBPushStr(&b, argv[0]);
+    SBPushStr(&b, ".old");
+    rename(argv[0], b.str.data);
+
+    Exec self = {};
+    SetName(&cmds, &self, argv[0]);
+    AddSource(&cmds, &self, sourcename);
+    PushExec(&cmds, self);
+    ExecuteCmdList(&cmds, 1);
+
+    execvp(argv[0], argv);
+
+}
+
+//Directory Iterators
+#include <dirent.h>
+#include <fcntl.h>
+
+static DIR* dirp;
+
+void DirBegin(char* filepath) {
+    dirp = opendir(filepath);
+}
+
+char* DirNext(DirType* t) {
+    struct dirent* d = NULL;
+    d = readdir(dirp);
+
+    *t = T_END;
+    if (!d) { 
+        closedir(dirp);
+        return NULL; 
+    }
+
+    if (d->d_type == DT_DIR) *t = T_DIR;
+    else if (d->d_type == DT_REG) *t = T_FILE;
+    else *t = T_UNKNOWN;
+
+    return d->d_name;
 }
 
 #endif

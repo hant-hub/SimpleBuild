@@ -1,5 +1,14 @@
 ## Next:
-- [ ] Cmp File Times
-- [ ] Auto Rebuild
+- [X] Cmp File Times
+- [X] Auto Rebuild
+- [X] specify compiler
 - [ ] Iterate over Directory
-- [ ] specify compiler
+    - [X] Non Recrusive Version
+    - [ ] Recursive Version
+- [ ] Debug Flags
+    - [ ] Printing commands
+- [ ] More Exec
+    - [ ] Add Static Libraries
+    - [ ] Add Dynamic Libraries
+- [ ] Generate Compile Commands
+
