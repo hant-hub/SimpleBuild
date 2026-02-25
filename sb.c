@@ -81,12 +81,33 @@ int main(int argc, char* argv[]) {
     GetExtension("a/b/c", &b);
     printf("Ext: %s\n", b.str.data);
 
+    u32 i = GetPathDepth("a/b/c");
+    printf("depth: %d\n", i);
+
     //iterate over directory
-    DirBegin(".");
+    //DirBegin(".");
+    //while (1) {
+    //    DirType t;
+    //    char* file = DirNext(&t);
+    //    if (t == T_END) break;
+
+    //    printf("File: %s ", file);
+    //    switch(t) {
+    //        case T_FILE: printf("file\n"); break;
+    //        case T_DIR: printf("dir\n"); break;
+    //        case T_UNKNOWN: printf("unknown\n"); break;
+    //        case T_END: printf("end\n"); break;
+    //    }
+    //}
+
+    printf("--------Recursive---------\n");
+    //iterate over directory
+    DirBeginRec(".", 3);
     while (1) {
         DirType t;
-        char* file = DirNext(&t);
+        char* file = DirNextRec(&t);
         if (t == T_END) break;
+        if (t != T_DIR) continue;
 
         printf("File: %s ", file);
         switch(t) {

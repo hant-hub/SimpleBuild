@@ -150,6 +150,7 @@ void SetCompiler(char* comp);
 
 //File Helpers
 
+u32 GetPathDepth(char* filepath);
 void GetExtension(char* filepath, StringBuilder* b);
 void PopDirLevel(char* filepath, StringBuilder* b);
 void ExtractBaseName(char* filepath, StringBuilder* b);
@@ -169,14 +170,18 @@ typedef enum DirType {
 void DirBegin(char* filepath);
 char* DirNext(DirType* t);
 
+void DirBeginRec(char* filepath, u32 max_depth);
+char* DirNextRec(DirType* t);
 
 
 
 #ifdef SB_IMPL
 #include <stdlib.h>
 #include <string.h>
-#include <sys/wait.h>
+#include <stdio.h>
 #include <unistd.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
 
 // String builder Functions
 void SBPushChar(StringBuilder *b, char c) {
@@ -214,7 +219,6 @@ void PushCmdArg(CmdList *list, Cmd *c, char *str) {
     dynPush(c->args, id);
 }
 
-#include <stdio.h>
 void ExecuteCmd(CmdList *list, Cmd cmd, u32 num_jobs) {
     static int num_jobs_outstanding = 0;
 
@@ -241,11 +245,13 @@ void ExecuteCmd(CmdList *list, Cmd cmd, u32 num_jobs) {
     dynPush(list->curr_cmd, NULL);
     num_jobs_outstanding++;
 
+#ifdef SB_DEBUG
     printf("Cmd: ");
     for (u32 i = 0; i < list->curr_cmd.size; i++) {
         printf("%s ", list->curr_cmd.data[i]);
     }
     printf("\n");
+#endif
 
     if (fork() != 0)
         return;
@@ -283,6 +289,9 @@ void AddFlag(CmdList *list, Exec *e, char *flag) {
 static char* compiler = "cc";
 
 void SetCompiler(char* comp) {
+#ifdef SB_DEBUG
+    printf("New Compiler: %s\n", comp);
+#endif
     compiler = comp;
 }
 
@@ -312,8 +321,22 @@ void PushExec(CmdList *list, Exec e) {
     AddCmd(list, comp);
 }
 
-#include <sys/stat.h>
 //File Helpers
+
+u32 GetPathDepth(char* filepath) {
+    u32 i = 0;
+    if (filepath[i] == '/') i++;
+    if (filepath[i] == '.' && filepath[i + 1] == '/') i += 2;
+
+    u32 depth = 1;
+    while (filepath[i]) {
+        if (filepath[i] == '/') depth++;
+        i++;
+    }
+
+
+    return depth;
+}
 
 void GetExtension(char* filepath, StringBuilder* b) {
     u32 len = strlen(filepath);
@@ -375,7 +398,6 @@ void MakeDirectory(char* filepath) {
     SBFreeString(b);
 }
 
-#include <sys/stat.h>
 u64 GetFileTime(char* filepath) {
 
     struct stat buf;
@@ -396,6 +418,10 @@ void _RebuildSelf(char* sourcename, u32 argc, char** argv) {
 
     //binary matches
     if (t1 > t2) return;
+
+#ifdef SB_DEBUG
+    printf("Rebuild Required\n");
+#endif
 
     CmdList cmds = {};
 
@@ -418,19 +444,19 @@ void _RebuildSelf(char* sourcename, u32 argc, char** argv) {
 #include <dirent.h>
 #include <fcntl.h>
 
-static DIR* dirp;
+static DIR* dirpn;
 
 void DirBegin(char* filepath) {
-    dirp = opendir(filepath);
+    dirpn = opendir(filepath);
 }
 
 char* DirNext(DirType* t) {
     struct dirent* d = NULL;
-    d = readdir(dirp);
+    d = readdir(dirpn);
 
     *t = T_END;
     if (!d) { 
-        closedir(dirp);
+        closedir(dirpn);
         return NULL; 
     }
 
@@ -439,6 +465,69 @@ char* DirNext(DirType* t) {
     else *t = T_UNKNOWN;
 
     return d->d_name;
+}
+
+static dynArray(StringBuilder) paths = {};
+static StringBuilder curr_path = {};
+static StringBuilder out_path = {};
+static DIR* curr = NULL;
+static u32 max_depth = 0;
+
+void DirBeginRec(char* filepath, u32 depth) {
+    curr = opendir(filepath);
+    SBResetString(&curr_path);
+    SBPushStr(&curr_path, filepath);
+    max_depth = depth;
+}
+
+char* DirNextRec(DirType* t) {
+    struct dirent* d = NULL;
+
+    while (curr || paths.size) {
+        d = readdir(curr);
+
+        if (!d) { 
+            closedir(curr);
+            SBFreeString(curr_path);
+            curr = NULL;
+            if (!paths.size) break;
+            curr_path = dynBack(paths);
+            curr = opendir(curr_path.str.data);
+            paths.size--;
+            continue;
+        }
+
+        if (strcmp(d->d_name, ".") == 0) continue;
+        if (strcmp(d->d_name, "..") == 0) continue;
+
+        switch (d->d_type) {
+            case DT_DIR: 
+                *t = T_DIR;
+                StringBuilder new = {};
+                if (curr_path.str.data) {
+                    SBPushStr(&new, curr_path.str.data);
+                    SBPushChar(&new, '/');
+                }
+                SBPushStr(&new, d->d_name);
+                if (max_depth <= GetPathDepth(new.str.data)) {
+                    SBFreeString(new);
+                    break;
+                }
+                dynPush(paths, new);
+            break;
+            case DT_REG: *t = T_FILE; break;
+            default: *t = T_UNKNOWN; break;
+        }
+        SBResetString(&out_path);
+        SBPushStr(&out_path, curr_path.str.data);
+        SBPushChar(&out_path, '/');
+        SBPushStr(&out_path, d->d_name);
+
+        return out_path.str.data;
+    }
+
+    *t = T_END;
+    return NULL;
 }
 
 #endif
