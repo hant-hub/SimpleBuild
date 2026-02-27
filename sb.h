@@ -135,8 +135,9 @@ void PushCmdArg(CmdList *list, Cmd *c, char *str);
 
 // Executable
 typedef struct Exec {
-    u32 exe_name;
+    u8 gen_compile_commands;
 
+    u32 exe_name;
     dynArray(u32) sources;
     dynArray(u32) flags;
 } Exec;
@@ -144,12 +145,16 @@ typedef struct Exec {
 void SetName(CmdList *list, Exec *e, char *name);
 void AddSource(CmdList *list, Exec *e, char *filename);
 void AddFlag(CmdList *list, Exec *e, char *flag);
+void AddDynamicLib(CmdList *list, Exec* e, char* libname);
+void IncludeDir(CmdList *list, Exec* e, char* dirname);
+void GenCompileCommands(Exec* e);
 void PushExec(CmdList *list, Exec e); // frees Exec
 void SetCompiler(char* comp);
 
 
 //File Helpers
 
+void ExeRelative();
 u32 GetPathDepth(char* filepath);
 void GetExtension(char* filepath, StringBuilder* b);
 void PopDirLevel(char* filepath, StringBuilder* b);
@@ -182,6 +187,7 @@ char* DirNextRec(DirType* t);
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <linux/limits.h>
 
 // String builder Functions
 void SBPushChar(StringBuilder *b, char c) {
@@ -295,16 +301,65 @@ void SetCompiler(char* comp) {
     compiler = comp;
 }
 
+void AddDynamicLib(CmdList *list, Exec* e, char* libname) {
+    StringBuilder b = {};
+    SBPushStr(&b, "-L");
+    SBPushStr(&b, libname);
+    AddFlag(list, e, b.str.data);
+    SBFreeString(b);
+}
+
+void IncludeDir(CmdList *list, Exec* e, char* dirname) {
+    StringBuilder b = {};
+    SBPushStr(&b, "-I");
+    SBPushStr(&b, dirname);
+    AddFlag(list, e, b.str.data);
+    SBFreeString(b);
+}
+
+static FILE* base = NULL;
+static u32 num_entries = 0;
+void cleanupBase() {
+    if (base) {
+        fputc('\n', base);
+        fputc(']', base);
+        fputc('\n', base);
+        fclose(base);
+    }
+}
+
+void GenCompileCommands(Exec* e) {
+    e->gen_compile_commands = 1;
+    if (base == NULL) {
+        base = fopen("./compile_commands.json", "w+");
+        fputc('[', base);
+        fputc('\n', base);
+        atexit(cleanupBase);
+    }
+}
+
 void PushExec(CmdList *list, Exec e) {
     //generate cmd
-
     StringBuilder b = {};
     Cmd comp = {};
     PushCmdArg(list, &comp, compiler);
 
+
     //push sources
     for (u32 i = 0; i < e.sources.size; i++) {
         dynPush(comp.args, e.sources.data[i]);
+    }
+
+    StringBuilder entry = {};
+    if (e.gen_compile_commands) {
+        SBPushStr(&entry, "{ \"directory\": \"");
+
+        char path[PATH_MAX + 1] = {0};
+        getcwd(path, PATH_MAX);
+        SBPushStr(&entry, path);
+
+        SBPushStr(&entry, "\", ");
+        SBPushStr(&entry, "\"arguments\": [");
     }
 
     //flags
@@ -313,7 +368,31 @@ void PushExec(CmdList *list, Exec e) {
         SBPushChar(&b, '-'); //flag char
         SBPushStr(&b, &list->strs.data[e.flags.data[i]]);
         PushCmdArg(list, &comp, b.str.data);
+
+        if (e.gen_compile_commands) {
+            char* flag = b.str.data;
+            //printf("flag: %s\n", flag);
+            SBPushChar(&entry, '\"');
+            SBPushStr(&entry, flag);
+            SBPushChar(&entry, '\"');
+
+            if (i + 1 < e.flags.size) {
+                SBPushStr(&entry, ", ");
+            }
+        }
     }
+
+    if (e.gen_compile_commands) {
+        SBPushStr(&entry, "], \"file\":");
+        for (u32 i = 0; i < e.sources.size; i++) {
+            char* source = &list->strs.data[e.sources.data[i]];
+            if (num_entries) fprintf(base, ",\n");
+            fprintf(base, "\t%s \"%s\" }", entry.str.data, source);
+            num_entries++;
+        }
+        SBFreeString(entry);
+    }
+
 
     //output
     PushCmdArg(list, &comp, "-o");
@@ -322,6 +401,26 @@ void PushExec(CmdList *list, Exec e) {
 }
 
 //File Helpers
+
+void ExeRelative() {
+    char filepath[PATH_MAX + 1] = {0};
+    if (!readlink("/proc/self/exe", filepath, PATH_MAX)) {
+#ifdef SB_DEBUG
+        printf("Cannot find EXE path\n");
+#endif
+        return;
+    }
+
+    StringBuilder b = {};
+
+    PopDirLevel(filepath, &b);
+#ifdef SB_DEBUG
+    printf("Exe At: %s\n", b.str.data);
+#endif
+    chdir(b.str.data);
+
+    SBFreeString(b);
+}
 
 u32 GetPathDepth(char* filepath) {
     u32 i = 0;

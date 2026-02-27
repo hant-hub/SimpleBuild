@@ -7,8 +7,14 @@
     - [X] Recursive Version
 - [X] Debug Flags
     - [X] Printing commands
-- [ ] More Exec
-    - [ ] Add Static Libraries
-    - [ ] Add Dynamic Libraries
-- [ ] Generate Compile Commands
-
+- [X] Relative To Exe Location
+- [X] More Exec
+    - [X] Add Include Dir
+    - [X] Add Dynamic Libraries
+- [X] Generate Compile Commands
+    - [X] make file
+    - [X] Write Entry
+- [ ] Free Memory
+    - [ ] Exec
+    - [ ] Cmd
+    - [ ] CmdList

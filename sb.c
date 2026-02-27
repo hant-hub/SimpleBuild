@@ -1,10 +1,12 @@
 #define SB_IMPL
+#define SB_DEBUG
 #include "sb.h"
 #include <stdio.h>
 
 
 int main(int argc, char* argv[]) {
 
+    ExeRelative();
     RebuildSelf(argc, argv);
     printf("next\n");
 
@@ -54,7 +56,12 @@ int main(int argc, char* argv[]) {
     Exec e = {0};
     SetName(&cmds, &e, "build");
     AddSource(&cmds, &e, "sb.c");
+    AddSource(&cmds, &e, "rand.c");
     AddFlag(&cmds, &e, "g");
+    //AddFlag(&cmds, &e, "DSB_DEBUG");
+    GenCompileCommands(&e);
+
+    PushExec(&cmds, e);
     PushExec(&cmds, e);
 
     ExecuteCmdList(&cmds, 1); 
@@ -100,21 +107,21 @@ int main(int argc, char* argv[]) {
     //    }
     //}
 
-    printf("--------Recursive---------\n");
-    //iterate over directory
-    DirBeginRec(".", 3);
-    while (1) {
-        DirType t;
-        char* file = DirNextRec(&t);
-        if (t == T_END) break;
-        if (t != T_DIR) continue;
+    //printf("--------Recursive---------\n");
+    ////iterate over directory
+    //DirBeginRec(".", 3);
+    //while (1) {
+    //    DirType t;
+    //    char* file = DirNextRec(&t);
+    //    if (t == T_END) break;
+    //    if (t != T_DIR) continue;
 
-        printf("File: %s ", file);
-        switch(t) {
-            case T_FILE: printf("file\n"); break;
-            case T_DIR: printf("dir\n"); break;
-            case T_UNKNOWN: printf("unknown\n"); break;
-            case T_END: printf("end\n"); break;
-        }
-    }
+    //    printf("File: %s ", file);
+    //    switch(t) {
+    //        case T_FILE: printf("file\n"); break;
+    //        case T_DIR: printf("dir\n"); break;
+    //        case T_UNKNOWN: printf("unknown\n"); break;
+    //        case T_END: printf("end\n"); break;
+    //    }
+    //}
 } 
