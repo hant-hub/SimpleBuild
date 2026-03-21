@@ -106,7 +106,7 @@ typedef struct StringBuilder {
 void SBPushChar(StringBuilder *b, char c);
 void SBPushStr(StringBuilder *b, char *str);
 void SBResetString(StringBuilder *b);
-void SBFreeString(StringBuilder b);
+void SBFreeString(StringBuilder* b);
 
 // Cmd List
 typedef struct Cmd {
@@ -127,6 +127,7 @@ u32 AddStr(CmdList *list, char *str);
 void AddCmd(CmdList *list, Cmd cmd);
 void ExecuteCmd(CmdList *list, Cmd cmd, u32 num_jobs);
 void ExecuteCmdList(CmdList *list, u32 max_processes);
+void FreeCmd(Cmd c);
 void FreeCmdList(CmdList list);
 
 void PushCmdArg(CmdList *list, Cmd *c, char *str);
@@ -148,7 +149,8 @@ void AddFlag(CmdList *list, Exec *e, char *flag);
 void AddDynamicLib(CmdList *list, Exec* e, char* libname);
 void IncludeDir(CmdList *list, Exec* e, char* dirname);
 void GenCompileCommands(Exec* e);
-void PushExec(CmdList *list, Exec e); // frees Exec
+void PushExec(CmdList *list, Exec e);
+void FreeExec(Exec e);                            
 void SetCompiler(char* comp);
 
 
@@ -178,8 +180,6 @@ char* DirNext(DirType* t);
 void DirBeginRec(char* filepath, u32 max_depth);
 char* DirNextRec(DirType* t);
 
-
-
 #ifdef SB_IMPL
 #include <stdlib.h>
 #include <string.h>
@@ -199,11 +199,16 @@ void SBPushChar(StringBuilder *b, char c) {
 void SBPushStr(StringBuilder *b, char *str) {
     if (b->str.size)
         b->str.size -= 1;
-    dynExt(b->str, str, strlen(str));
+
+    u32 len = strlen(str);
+    dynExt(b->str, str, len);
     dynPush(b->str, 0);
 }
 void SBResetString(StringBuilder *b) { b->str.size = 0; }
-void SBFreeString(StringBuilder b) { dynFree(b.str); }
+void SBFreeString(StringBuilder* b) { 
+    dynFree(b->str); 
+    *b = (StringBuilder){0};
+}
 
 // Cmd Functions
 
@@ -218,7 +223,16 @@ u32 AddStr(CmdList *list, char *str) {
     return curr;
 }
 
-void AddCmd(CmdList *list, Cmd cmd) { dynPush(list->cmds, cmd); }
+void AddCmd(CmdList *list, Cmd cmd) { 
+    dynPush(list->cmds, (Cmd){}); 
+    dynBack(list->cmds) = (Cmd) {
+        .fence = cmd.fence,
+    };
+
+    if (cmd.args.size) {
+        dynExt(dynBack(list->cmds).args, cmd.args.data, cmd.args.size);
+    }
+}
 
 void PushCmdArg(CmdList *list, Cmd *c, char *str) {
     u32 id = AddStr(list, str);
@@ -271,7 +285,14 @@ void ExecuteCmdList(CmdList *list, u32 max_processes) {
     ExecuteCmd(list, (Cmd){.fence = 1}, max_processes);
 }
 
+void FreeCmd(Cmd c) {
+    dynFree(c.args);
+}
+
 void FreeCmdList(CmdList list) {
+    for (u32 i = 0; i < list.cmds.size; i++) {
+        FreeCmd(list.cmds.data[i]);
+    }
     dynFree(list.cmds);
     dynFree(list.strs);
     dynFree(list.curr_cmd);
@@ -306,7 +327,7 @@ void AddDynamicLib(CmdList *list, Exec* e, char* libname) {
     SBPushStr(&b, "-L");
     SBPushStr(&b, libname);
     AddFlag(list, e, b.str.data);
-    SBFreeString(b);
+    SBFreeString(&b);
 }
 
 void IncludeDir(CmdList *list, Exec* e, char* dirname) {
@@ -314,7 +335,7 @@ void IncludeDir(CmdList *list, Exec* e, char* dirname) {
     SBPushStr(&b, "-I");
     SBPushStr(&b, dirname);
     AddFlag(list, e, b.str.data);
-    SBFreeString(b);
+    SBFreeString(&b);
 }
 
 static FILE* base = NULL;
@@ -390,7 +411,7 @@ void PushExec(CmdList *list, Exec e) {
             fprintf(base, "\t%s \"%s\" }", entry.str.data, source);
             num_entries++;
         }
-        SBFreeString(entry);
+        SBFreeString(&entry);
     }
 
 
@@ -398,6 +419,17 @@ void PushExec(CmdList *list, Exec e) {
     PushCmdArg(list, &comp, "-o");
     dynPush(comp.args, e.exe_name);
     AddCmd(list, comp);
+
+    FreeCmd(comp);
+    SBFreeString(&b);
+
+    //dynFree(e.sources);
+    //dynFree(e.flags);
+}
+
+void FreeExec(Exec e) {
+    dynFree(e.sources);
+    dynFree(e.flags);
 }
 
 //File Helpers
@@ -419,7 +451,7 @@ void ExeRelative() {
 #endif
     chdir(b.str.data);
 
-    SBFreeString(b);
+    SBFreeString(&b);
 }
 
 u32 GetPathDepth(char* filepath) {
@@ -494,7 +526,7 @@ void MakeDirectory(char* filepath) {
         b.str.size--;
     }
     mkdir(filepath, 0777);
-    SBFreeString(b);
+    SBFreeString(&b);
 }
 
 u64 GetFileTime(char* filepath) {
@@ -587,7 +619,7 @@ char* DirNextRec(DirType* t) {
 
         if (!d) { 
             closedir(curr);
-            SBFreeString(curr_path);
+            SBFreeString(&curr_path);
             curr = NULL;
             if (!paths.size) break;
             curr_path = dynBack(paths);
@@ -609,7 +641,7 @@ char* DirNextRec(DirType* t) {
                 }
                 SBPushStr(&new, d->d_name);
                 if (max_depth <= GetPathDepth(new.str.data)) {
-                    SBFreeString(new);
+                    SBFreeString(&new);
                     break;
                 }
                 dynPush(paths, new);
@@ -624,6 +656,9 @@ char* DirNextRec(DirType* t) {
 
         return out_path.str.data;
     }
+
+    SBFreeString(&out_path); 
+    dynFree(paths);
 
     *t = T_END;
     return NULL;

@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
     printf("b: %s\n", b.str.data);
     printf("size: %ld cap: %ld\n", b.str.size, b.str.cap);
 
-    SBFreeString(b);
+    SBFreeString(&b);
 
     CmdList cmds = {
         .cmds = {0},
@@ -49,6 +49,8 @@ int main(int argc, char* argv[]) {
     AddCmd(&cmds, print_cmd);
 
     ExecuteCmdList(&cmds, 4);
+    FreeCmd(new_cmd);
+    FreeCmd(print_cmd);
     FreeCmdList(cmds);
 
     cmds = (CmdList){0};
@@ -64,9 +66,10 @@ int main(int argc, char* argv[]) {
     PushExec(&cmds, e);
     PushExec(&cmds, e);
 
+    FreeExec(e);
+
     ExecuteCmdList(&cmds, 1); 
 
-    dynFree(new_cmd.args);
     FreeCmdList(cmds);
 
     MakeDirectory("tmp/thing");
@@ -90,6 +93,8 @@ int main(int argc, char* argv[]) {
 
     u32 i = GetPathDepth("a/b/c");
     printf("depth: %d\n", i);
+
+    SBFreeString(&b);
 
     //iterate over directory
     //DirBegin(".");

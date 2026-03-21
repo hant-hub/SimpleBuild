@@ -14,7 +14,7 @@
 - [X] Generate Compile Commands
     - [X] make file
     - [X] Write Entry
-- [ ] Free Memory
-    - [ ] Exec
-    - [ ] Cmd
-    - [ ] CmdList
+- [X] Free Memory
+    - [X] Exec
+    - [X] Cmd
+    - [X] CmdList
